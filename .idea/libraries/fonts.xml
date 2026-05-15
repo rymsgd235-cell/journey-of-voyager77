@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="fonts">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/fonts/geometra.zip!/" />
+      <root url="jar://$PROJECT_DIR$/fonts/jetbrains-mono.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

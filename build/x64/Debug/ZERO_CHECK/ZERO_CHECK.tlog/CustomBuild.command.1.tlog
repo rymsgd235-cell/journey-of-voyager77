@@ -1,0 +1,10 @@
+^C:\USERS\USAMA GULZAR\DOWNLOADS\RAFAY'S GAME\BUILD\CMAKEFILES\0B232E4CB19240B7469921A54EDACBFF\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SC:/Users/Usama Gulzar/Downloads/Rafay's Game" "-BC:/Users/Usama Gulzar/Downloads/Rafay's Game/build" --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file "C:/Users/Usama Gulzar/Downloads/Rafay's Game/build/orbital_defender.sln"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

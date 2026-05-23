@@ -1,0 +1,3 @@
+C:/Users/Usama Gulzar/Downloads/Rafay's Game/build/CMakeFiles/orbital_defender.dir
+C:/Users/Usama Gulzar/Downloads/Rafay's Game/build/CMakeFiles/ALL_BUILD.dir
+C:/Users/Usama Gulzar/Downloads/Rafay's Game/build/CMakeFiles/ZERO_CHECK.dir

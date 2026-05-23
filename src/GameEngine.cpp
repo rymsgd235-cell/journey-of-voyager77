@@ -1,0 +1,4028 @@
+#include "GameEngine.h"
+#include <cstring>
+#include <cctype>
+
+//center text horizontally using current screen width and font metrics
+void GameEngine::DrawTextCentered(const std::string &txt, float y, float fontSize, int spacing, Color color) {
+    float w = MeasureTextEx(res.font, txt.c_str(), fontSize, spacing).x;
+    float x = GetScreenWidth() / 2.0f - w / 2.0f;
+    DrawTextEx(res.font, txt.c_str(), { x, y }, fontSize, spacing, color);
+}
+void GameEngine::Init() {
+    res.LoadAll();
+    // Initialize activeMiniGame
+    activeMiniGame = MiniGameData();
+    activeMiniGame.type = MINIGAME_NONE;
+    activeMiniGame.active = false;
+    // Generate procedural audio
+    res.sndDot = Synthesizer::GenerateMorseSound(0.15f, 500.0f);
+    res.sndDash = Synthesizer::GenerateMorseSound(0.40f, 500.0f);
+    res.sndSuccess = Synthesizer::GenerateMorseSound(0.6f, 1300.0f);
+    // Start background music
+    PlayMusicStream(res.bgMusic);
+
+    // Define Level Sequence (Easy -> Hard)
+    // Stage 1: The Foundation
+    levelSequence = { 'E', 'T', 'I', 'M', 'A', 'N' };
+    // Stage 2: The Symmetry
+    std::vector<char> s2 = { 'S', 'O', 'D', 'U', 'R', 'K' };
+    levelSequence.insert(levelSequence.end(), s2.begin(), s2.end());
+    // Stage 3: The Complex Beats (first half)
+    std::vector<char> s3 = { 'C', 'L', 'F', 'P', 'Q', 'B', 'G' };
+    levelSequence.insert(levelSequence.end(), s3.begin(), s3.end());
+    // Stage 4: The Complex Beats (second half)
+    std::vector<char> s4 = { 'H', 'J', 'V', 'W', 'X', 'Y', 'Z' };
+    levelSequence.insert(levelSequence.end(), s4.begin(), s4.end());
+
+    // FULL DICTIONARY
+    morseTable['A']=".-";   morseTable['B']="-..."; morseTable['C']="-.-.";
+    morseTable['D']="-..";  morseTable['E']=".";    morseTable['F']="..-.";
+    morseTable['G']="--.";   morseTable['H']="...."; morseTable['I']="..";
+    morseTable['J']=".---"; morseTable['K']="-.-";  morseTable['L']=".-..";
+    morseTable['M']="--";    morseTable['N']="-.";   morseTable['O']="---";
+    morseTable['P']=".--."; morseTable['Q']="--.-"; morseTable['R']=".-.";
+    morseTable['S']="...";  morseTable['T']="-";    morseTable['U']="..-";
+    morseTable['V']="...-"; morseTable['W']=".--";  morseTable['X']="-..-";
+    morseTable['Y']="-.--"; morseTable['Z']="--..";
+
+    // Initialize Word Dictionary (Simple words)
+    wordDictionary = {
+        // 3-letter words
+        "TEA", "MET", "RIM", "NET", "TEN", "MAN", "MEN", "MAT",
+        "SEA", "SUN", "SAD", "RUN", "RED", "ASK", "USE", "SON",
+        "CAR", "CAT", "CAP", "MAP", "LAP", "LIP", "ZIP", "ZOO",
+        "BOX", "FOX", "BOY", "JOY", "SKY", "FLY", "TRY", "CRY",
+        "BIG", "BAG", "BUG", "DOG", "DIG", "FOG", "LOG", "PIG",
+        "WET", "WEB", "WIN", "WAR", "EAR", "EAT", "FAR", "FAT",
+        "HOT", "HAT", "HIT", "HUT", "HOP", "HUG", "HAM", "HEN",
+        "JAM", "JAR", "JET", "JOB", "JUG", "GAP", "GAS", "GUN",
+        "GET", "GOT", "GYM", "FUN", "FIN", "FAN", "FEW", "FIG",
+        "BED", "BET", "BUS", "BAT", "BIT", "BUN", "BIN", "BAD",
+        "AGE", "AIR", "ART", "ACT", "ADD", "AID", "AIM", "ARM",
+        "OWL", "OAK", "OLD", "ODD", "OIL", "ORB", "PAN", "PAT",
+        "PEN", "PET", "PIN", "POT", "PUP", "PUT", "RAT", "RAG",
+        "ROT", "ROW", "SIT", "SAT", "SET", "SIP", "SOB", "TAN",
+        "TIP", "TOP", "TOY", "TUB", "VAN", "VET", "WAX", "WIG",
+        "YAM", "YAP", "YES", "YET", "ZAP", "DAY", "DEN", "DIM",
+        
+        // 4-letter words
+        "TENT", "MINT", "TEAM", "MEAT", "NAME", "TIME", "MAKE",
+        "TAKE", "HAVE", "GAVE", "SAVE", "WAVE", "COME", "HOME",
+        "BONE", "CONE", "DONE", "GONE", "ZONE", "TONE", "LONE",
+        "HOPE", "ROPE", "NOTE", "VOTE", "ROSE", "NOSE", "LOSE",
+        "BIKE", "LIKE", "MIKE", "HIKE", "LAKE", "CAKE", "WAKE",
+        "FIRE", "WIRE", "TIRE", "HIRE", "PINE", "MINE", "DINE",
+        "FINE", "LINE", "NINE", "VINE", "WINE", "RACE", "FACE",
+        "PACE", "LACE", "BASE", "CASE", "VASE", "GATE", "LATE",
+        "MATE", "RATE", "DATE", "FATE", "HATE", "TALE", "SALE",
+        "PALE", "MALE", "DALE", "BALE", "GALE", "VALE", "WALE",
+        "BEST", "REST", "TEST", "WEST", "NEST", "PEST", "VEST",
+        "JEST", "FAST", "LAST", "PAST", "CAST", "VAST", "MAST",
+        "JUST", "MUST", "RUST", "DUST", "BUST", "GUST", "LIFE",
+        "WIFE", "RIFE", "SAFE", "CAFE", "GAME", "SAME", "TAME",
+        "FAME", "LAME", "CAME", "DAMP", "CAMP", "LAMP", "RAMP",
+        "JUMP", "BUMP", "PUMP", "DUMP", "LUMP", "HUMP", "BOOK",
+        "LOOK", "TOOK", "COOK", "HOOK", "ROCK", "LOCK", "DOCK",
+        "SOCK", "MOCK", "PACK", "BACK", "RACK", "SACK", "JACK",
+        "TACK", "LACK", "DUCK", "LUCK", "MUCK", "PUCK", "SUCK",
+        "TUCK", "PICK", "SICK", "KICK", "TICK", "WICK", "LICK",
+        "PARK", "BARK", "DARK", "MARK", "LARK", "HARK", "WORK",
+        "FORK", "CORK", "PORK", "COLD", "BOLD", "GOLD", "FOLD",
+        "HOLD", "MOLD", "SOLD", "TOLD", "KIND", "FIND", "MIND",
+        "WIND", "BIND", "RIND", "LAND", "HAND", "BAND", "SAND",
+    };    
+}
+
+std::string GameEngine::GetRandomWordForLevel(int maxIndex) {
+    std::vector<std::string> validWords;
+    for (const auto& w : wordDictionary) {
+        bool possible = true;
+        for (char c : w) {
+            // Find index of char in levelSequence
+            auto it = std::find(levelSequence.begin(), levelSequence.end(), c);
+            if (it == levelSequence.end()) {
+                 possible = false; break; 
+                }
+            int idx = std::distance(levelSequence.begin(), it);
+            if (idx > maxIndex) {
+                 possible = false; break;
+                 }
+        }
+        if (possible) validWords.push_back(w);
+    }
+    
+    if (validWords.empty()) return "E"; // Fallback
+    
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::uniform_int_distribution<> distr(0, validWords.size() - 1);
+    return validWords[distr(g)];
+}
+
+void GameEngine::Update() {
+   
+
+     // Toggle music mute with M key
+    if (IsKeyPressed(KEY_M) && IsKeyDown(KEY_LEFT_SHIFT)) {
+        isMusicMuted = !isMusicMuted;
+        if (isMusicMuted) {
+            SetMasterVolume(0.0f);
+        } else {
+            SetMasterVolume(1.0f);
+        }
+        return;
+        
+    }
+
+    
+    // Update music stream
+    UpdateMusicStream(res.bgMusic);
+    
+    // Handle pause menu
+    if (isPaused) {
+        UpdatePauseMenu();
+        return;
+    }
+    
+    float dt = GetFrameTime();
+    bounceTimer += dt;
+    
+    // Save current state for Continue feature (skip transient states)
+    if (state != LOGIN_SCREEN && state != PROGRESS_SCREEN && state != LEVEL_SELECT && 
+        state != MINIGAME_MENU && state != LEVEL_UP && state != REVERSE_LEVEL_UP) {
+        player.activeUser.lastGameState = (int)state;
+    }
+
+    switch (state) {
+        case LOGIN_SCREEN: UpdateLogin(); break;
+        case PROGRESS_SCREEN: UpdateProgressScreen(); break;
+        case LEVEL_SELECT: UpdateLevelSelect(); break;
+        case MINIGAME_MENU: UpdateMinigameMenu(); break;
+        case MINIGAME_GATE: UpdateMinigameGate(); break;
+        case MINIGAME_GATE_REVERSE: UpdateMinigameGateReverse(); break;
+        case STUDY_MODE:   UpdateStudy(); break;
+        case TEST_MODE:    UpdateTest();  break;
+        case LEVEL_UP:     UpdateLevelUp(); break;
+        case STAGE_TEST:   UpdateStageTest(); break;
+        case MINI_GAME:    UpdateMiniGame(); break;
+        case REVERSE_STUDY: UpdateReverseStudy(); break;
+        case REVERSE_TEST:  UpdateReverseTest(); break;
+        case REVERSE_LEVEL_UP: UpdateReverseLevelUp(); break;
+        case REVERSE_STAGE_TEST: UpdateReverseStageTest(); break;
+        case FINAL_GAME_1: UpdateFinalGame1(); break;
+        case FINAL_GAME_2: UpdateFinalGame2(); break;
+        case ABOUT_SCREEN: UpdateAboutScreen(); break;
+        case CREDITS_SCREEN: UpdateCreditsScreen(); break;
+    }
+}
+
+void GameEngine::UpdateLogin() {
+    if (showSignupPrompt) {
+        if (IsKeyPressed(KEY_ENTER)) {
+             // Create New User
+             player.CreateUser(loginInput);
+             state = PROGRESS_SCREEN;
+             progressScreenSelection = 0;
+             showSignupPrompt = false;
+        } else if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE)) {
+             showSignupPrompt = false; // Cancel signup
+        }
+    } else {
+        int key = GetCharPressed();
+        while (key > 0) {
+            if ((key >= 32) && (key <= 125) && (strlen(loginInput) < 15)) {
+                int len = strlen(loginInput);
+                loginInput[len] = (char)key;
+                loginInput[len + 1] = '\0';
+            }
+            key = GetCharPressed();
+        }
+        if (IsKeyPressed(KEY_BACKSPACE)) {
+            int len = strlen(loginInput);
+            if (len > 0) loginInput[len - 1] = '\0';
+        }
+        if (IsKeyPressed(KEY_ENTER) && strlen(loginInput) > 0) {
+            LoginStatus status = player.AttemptLogin(loginInput);
+            if (status == LOGIN_SUCCESS) {
+                state = PROGRESS_SCREEN;
+                progressScreenSelection = 0;
+            } else {
+                showSignupPrompt = true; // User not found, prompt to create
+            }
+        }
+    }
+}
+
+void GameEngine::UpdateProgressScreen() {
+    // Handle navigation
+    if (IsKeyPressed(KEY_DOWN)) {
+        if (bottomButtonSelection >= 0) 
+            // Navigate within bottom buttons
+            bottomButtonSelection = (bottomButtonSelection + 1) % 3;
+         else 
+            // Navigate main menu
+            progressScreenSelection = (progressScreenSelection + 1) % 3;
+        
+    }
+    if (IsKeyPressed(KEY_UP)) {
+        if (bottomButtonSelection >= 0) 
+            // Navigate within bottom buttons
+            bottomButtonSelection = (bottomButtonSelection - 1 + 3) % 3;
+         else 
+            // Navigate main menu
+            progressScreenSelection = (progressScreenSelection - 1 + 3) % 3;
+        
+    }
+    
+    // Switch between main menu and bottom buttons with LEFT/RIGHT
+    if (IsKeyPressed(KEY_RIGHT)) {
+        if (bottomButtonSelection < 0) 
+            // Switch to bottom buttons
+            bottomButtonSelection = 0;
+            progressScreenSelection = -1;
+        
+    }
+    if (IsKeyPressed(KEY_LEFT)) {
+        if (bottomButtonSelection >= 0) 
+            // Switch back to main menu
+            bottomButtonSelection = -1;
+            progressScreenSelection = 0;
+        
+    }
+    
+    if (IsKeyPressed(KEY_ENTER)) {
+        // Handle bottom button clicks
+        if (bottomButtonSelection == 0) {
+            // Switch User - return to login
+            state = LOGIN_SCREEN;
+            memset(loginInput, 0, sizeof(loginInput));
+            showSignupPrompt = false;
+            bottomButtonSelection = -1;
+            progressScreenSelection = 0;
+            return;
+        } else if (bottomButtonSelection == 1) {
+            // About
+            state = ABOUT_SCREEN;
+            return;
+        } else if (bottomButtonSelection == 2) {
+            // Credits
+            state = CREDITS_SCREEN;
+            return;
+        }
+        
+        // Handle main menu button clicks
+        if (progressScreenSelection == 0) {
+            // Continue from last state
+            
+            // First, check if player should be at a minigame gate
+            bool atNormalGate = (player.activeUser.currentLetterIdx + 1 >= levelSequence.size());
+            bool atReverseGate = (player.activeUser.reverseLevelIdx + 1 >= levelSequence.size());
+            
+            if (atReverseGate) {
+                // Completed both normal and reverse levels - go to reverse minigame gate
+                state = MINIGAME_GATE_REVERSE;
+                return;
+            } else if (atNormalGate) {
+                // Completed normal levels - go to normal minigame gate
+                state = MINIGAME_GATE;
+                return;
+            }
+            
+            // Determine if user should be in reverse mode or normal mode
+            // User should be in reverse mode if they have any reverse progress
+            // and haven't completed all reverse levels yet
+            bool hasReverseProgress = (player.activeUser.reverseLevelIdx > 0 && player.activeUser.reverseLevelIdx < levelSequence.size());
+            bool hasNormalProgress = (player.activeUser.currentLetterIdx < levelSequence.size());
+            
+            // Prioritize reverse mode if user has been working on it
+            if (hasReverseProgress) {
+                // User was in reverse mode
+                isReverseMode = true;
+                tempReverseLevelIdx = -1; // Reset temp to use actual progress
+                state = REVERSE_STUDY;
+            } else if (hasNormalProgress) {
+                // Start from current letter progress
+                tempLevelIdx = -1; // Reset temp to use actual progress
+                state = STUDY_MODE;
+            } else {
+                // Fallback to normal mode
+                tempLevelIdx = -1;
+                state = STUDY_MODE;
+            }
+        } else if (progressScreenSelection == 1) {
+            // Go to level select
+            state = LEVEL_SELECT;
+            levelSelectIndex = 0;
+        } else {
+            // Go to minigame menu
+            state = MINIGAME_MENU;
+            minigameMenuSelection = 0;
+        }
+    }
+}
+
+void GameEngine::UpdateLevelSelect() {
+    int overallLevel = player.GetOverallLevel(); // Total levels completed (0-57)
+    // Shows completed levels + 1 unlocked level (if available)
+    // Special case: if final levels are unlocked, show both (they unlock together)
+    int maxSelectableLevel = overallLevel;
+    bool finalLevelsUnlocked = (player.activeUser.defusePassedReverse && player.activeUser.timeAttackBestReverse >= 20.0f);
+    
+    if (overallLevel < 56 && overallLevel < 58) {
+        maxSelectableLevel = overallLevel + 1; // Show next unlocked level
+    } else if (overallLevel >= 56 && overallLevel < 58) {
+        // Final levels unlock together, so show both if unlocked
+        if (finalLevelsUnlocked && player.activeUser.finalLevelsCompleted < 2) {
+            maxSelectableLevel = 58; // Show both final levels
+        }
+        else
+            maxSelectableLevel = overallLevel + 1; // Show next one
+        
+    }
+    
+    if (maxSelectableLevel == 0) {
+        // No levels completed yet, go back to progress screen
+        if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER)) {
+            state = PROGRESS_SCREEN;
+        }
+        return;
+    }
+    
+    // Navigate through available levels
+    if (IsKeyPressed(KEY_RIGHT)) {
+        levelSelectIndex = (levelSelectIndex + 1) % maxSelectableLevel;
+    } else if (IsKeyPressed(KEY_LEFT)) {
+        levelSelectIndex = (levelSelectIndex - 1 + maxSelectableLevel) % maxSelectableLevel;
+    } else if (IsKeyPressed(KEY_DOWN)) {
+
+        levelSelectIndex++;
+
+        if (levelSelectIndex <= 13 && maxSelectableLevel >= 14 ) levelSelectIndex = 14;
+        else if (levelSelectIndex <= 26 && maxSelectableLevel >= 27 ) levelSelectIndex = 27;
+        else if (levelSelectIndex <= 28 && maxSelectableLevel >= 29 ) levelSelectIndex = 29;
+        else if (levelSelectIndex <= 41 && maxSelectableLevel >= 42 ) levelSelectIndex = 42;
+        else if (levelSelectIndex <= 54 && maxSelectableLevel >= 55 ) levelSelectIndex = 55;
+        else if (levelSelectIndex <= 56 && maxSelectableLevel >= 57 ) levelSelectIndex = 57;
+        else if (levelSelectIndex <= 58) levelSelectIndex = 1;
+
+        levelSelectIndex--;
+
+    } else if (IsKeyPressed(KEY_UP)) {
+
+        levelSelectIndex++;
+     
+        if      (levelSelectIndex >= 57) levelSelectIndex = 55; // World 7 -> 6
+        else if (levelSelectIndex >= 55) levelSelectIndex = 42; // World 6 -> 5
+        else if (levelSelectIndex >= 42) levelSelectIndex = 29; // World 5 -> 4
+        else if (levelSelectIndex >= 29) levelSelectIndex = 27; // World 4 -> 3
+        else if (levelSelectIndex >= 27) levelSelectIndex = 14; // World 3 -> 2
+        else if (levelSelectIndex >= 14) levelSelectIndex = 1;  // World 2 -> 1
+
+        // Wrap Around: If we are in World 1 (<= 13), find the highest unlocked world
+        else if (levelSelectIndex <= 13) 
+        {
+            if      (maxSelectableLevel >= 57) levelSelectIndex = 57;
+            else if (maxSelectableLevel >= 55) levelSelectIndex = 55;
+            else if (maxSelectableLevel >= 42) levelSelectIndex = 42;
+            else if (maxSelectableLevel >= 29) levelSelectIndex = 29;
+            else if (maxSelectableLevel >= 27) levelSelectIndex = 27;
+            else if (maxSelectableLevel >= 14) levelSelectIndex = 14;
+            else                               levelSelectIndex = 1; // Stay at 1 if nothing else is open
+        }
+
+        levelSelectIndex--;
+
+    }
+    
+    // Select level
+    if (IsKeyPressed(KEY_ENTER)) {
+        // Determine which section the selected level is in
+        // 0-25: Letter→Morse
+        // 26-27: Mini-games
+        // 28-53: Morse→Letter
+        // 54-55: Reverse Mini-games
+        // 56-57: Final levels
+        
+        if (levelSelectIndex < 26) {
+            // Letter→Morse level - use temp to allow playing without losing max progress
+            tempLevelIdx = levelSelectIndex;
+            state = STUDY_MODE;
+        } else if (levelSelectIndex < 28) {
+            // Mini-game selection
+            int minigameIdx = levelSelectIndex - 26;
+            if (minigameIdx == 0) {
+                // Defuse Protocol
+                activeMiniGame.defuseUsesLetterInput = false;
+                minigameLaunchedFrom = LEVEL_SELECT;
+                StartMiniGame(MINIGAME_DEFUSE);
+            } else {
+                // Time Attack
+                activeMiniGame.type = MINIGAME_TIME_ATTACK;
+                activeMiniGame.active = true;
+                activeMiniGame.timeAttackReverseMode = false;
+                activeMiniGame.timeAttackDuration = 60.0f;
+                activeMiniGame.timeAttackTimer = 60.0f;
+                activeMiniGame.timeAttackScore = 0;
+                activeMiniGame.timeAttackInput = "";
+                activeMiniGame.timeAttackTarget = levelSequence[GetRandomValue(0, 25)];
+                minigameLaunchedFrom = LEVEL_SELECT;
+                state = MINI_GAME;
+            }
+        } else if (levelSelectIndex < 54) {
+            // Morse→Letter level - use temp to allow playing without losing max progress
+            int reverseLvl = levelSelectIndex - 28;
+            tempReverseLevelIdx = reverseLvl;
+            isReverseMode = true;
+            state = REVERSE_STUDY;
+        } else if (levelSelectIndex < 56) {
+            // Reverse mini-game selection
+            int minigameIdx = levelSelectIndex - 54;
+            if (minigameIdx == 0) {
+                // Defuse Protocol (Reverse)
+                minigameLaunchedFrom = LEVEL_SELECT;
+                StartMiniGame(MINIGAME_DEFUSE);
+                activeMiniGame.defuseUsesLetterInput = true; // Set after StartMiniGame
+            } else {
+                // Time Attack (Reverse)
+                activeMiniGame.type = MINIGAME_TIME_ATTACK;
+                activeMiniGame.active = true;
+                activeMiniGame.timeAttackReverseMode = true;
+                activeMiniGame.timeAttackDuration = 60.0f;
+                activeMiniGame.timeAttackTimer = 60.0f;
+                activeMiniGame.timeAttackScore = 0;
+                activeMiniGame.timeAttackInput = "";
+                activeMiniGame.timeAttackTarget = levelSequence[GetRandomValue(0, 25)];
+                minigameLaunchedFrom = LEVEL_SELECT;
+                state = MINI_GAME;
+            }
+        } else {
+            // Final levels
+            int finalLevelIdx = levelSelectIndex - 56;
+            if (finalLevelIdx == 0) {
+                // Final Game 1: Beeps and Baaps
+                activeMiniGame.beepsPhase = 0;
+                activeMiniGame.beepsRound = 0;
+                activeMiniGame.beepsCorrectCount = 0;
+                activeMiniGame.beepsUserInput = "";
+                activeMiniGame.beepsIsPlaying = false; // Wait for user to be ready
+                activeMiniGame.beepsSoundTimer = 0;
+                activeMiniGame.beepsSoundIndex = 0;
+                activeMiniGame.beepsDelay = 0.8f; // Initial delay
+                activeMiniGame.beepsTargetLetter = levelSequence[GetRandomValue(0, 25)];
+                activeMiniGame.beepsWrongAttempts = 0;
+                activeMiniGame.beepsReady = false;
+                activeMiniGame.beepsShowAnswer = false;
+                PauseMusicStream(res.bgMusic);
+                state = FINAL_GAME_1;
+            } else if (finalLevelIdx == 1) {
+                // Final Game 2: Light Code (to be implemented)
+                state = FINAL_GAME_2;
+            }
+        }
+    }
+    
+    // Go back
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        state = PROGRESS_SCREEN;
+    }
+}
+
+void GameEngine::UpdateMinigameMenu() {
+    // If in configuration steps, handle those
+    if (timeAttackConfigStep > 0 || defuseConfigStep > 0 || parachuteConfigStep > 0) {
+        // Handle Time Attack Configuration
+        if (timeAttackConfigStep == 1) {
+            // Duration selection
+            if (IsKeyPressed(KEY_LEFT)) {
+                timeAttackDurationSelection = (timeAttackDurationSelection - 1 + 3) % 3;
+            }
+            if (IsKeyPressed(KEY_RIGHT)) {
+                timeAttackDurationSelection = (timeAttackDurationSelection + 1) % 3;
+            }
+            if (IsKeyPressed(KEY_ENTER)) {
+                timeAttackConfigStep = 2; // Move to mode selection
+                return;
+            }
+            if (IsKeyPressed(KEY_ESCAPE)) {
+                timeAttackConfigStep = 0;
+                return;
+            }
+        } else if (timeAttackConfigStep == 2) {
+            // Mode selection
+            if (IsKeyPressed(KEY_LEFT)) {
+                timeAttackModeSelection = (timeAttackModeSelection - 1 + 2) % 2;
+            }
+            if (IsKeyPressed(KEY_RIGHT)) {
+                timeAttackModeSelection = (timeAttackModeSelection + 1) % 2;
+            }
+            if (IsKeyPressed(KEY_ENTER)) {
+                // Start the game
+                activeMiniGame.type = MINIGAME_TIME_ATTACK;
+                activeMiniGame.active = true;
+                activeMiniGame.timer = 0.0f;
+                
+                float durations[] = {30.0f, 60.0f, 90.0f};
+                activeMiniGame.timeAttackDuration = durations[timeAttackDurationSelection];
+                activeMiniGame.timeAttackTimer = activeMiniGame.timeAttackDuration;
+                
+                activeMiniGame.timeAttackScore = 0;
+                activeMiniGame.timeAttackInput = "";
+                activeMiniGame.timeAttackReverseMode = (timeAttackModeSelection == 1);
+                activeMiniGame.timeAttackTarget = levelSequence[GetRandomValue(0, 25)];
+                
+                timeAttackConfigStep = 0;
+                minigameLaunchedFrom = MINIGAME_MENU; // Track that we came from minigame menu
+                state = MINI_GAME;
+                return;
+            }
+            if (IsKeyPressed(KEY_ESCAPE)) {
+                timeAttackConfigStep = 1;
+                return;
+            }
+        }
+        // Handle Defuse Protocol Configuration
+        else if (defuseConfigStep == 1) {
+            // Mode selection
+            if (IsKeyPressed(KEY_LEFT)) {
+                defuseModeSelection = (defuseModeSelection - 1 + 2) % 2;
+            }
+            if (IsKeyPressed(KEY_RIGHT)) {
+                defuseModeSelection = (defuseModeSelection + 1) % 2;
+            }
+            if (IsKeyPressed(KEY_ENTER)) {
+                // Start the game
+                //activeMiniGame.isLevelII = false;
+                minigameLaunchedFrom = MINIGAME_MENU; // Track that we came from minigame menu
+                StartMiniGame(MINIGAME_DEFUSE);
+                activeMiniGame.defuseUsesLetterInput = (defuseModeSelection == 0); // 0=Morse→Letter (shows morse, expects letters)
+                defuseConfigStep = 0;
+                return;
+            }
+            if (IsKeyPressed(KEY_ESCAPE)) {
+                defuseConfigStep = 0;
+                return;
+            }
+        }
+        // Handle Parachute Drop Configuration
+        else if (parachuteConfigStep == 1) {
+            // Mode selection
+            if (IsKeyPressed(KEY_LEFT)) {
+                parachuteModeSelection = (parachuteModeSelection - 1 + 2) % 2;
+            }
+            if (IsKeyPressed(KEY_RIGHT)) {
+                parachuteModeSelection = (parachuteModeSelection + 1) % 2;
+            }
+            if (IsKeyPressed(KEY_ENTER)) {
+                // Start the game
+                activeMiniGame.type = MINIGAME_PARACHUTE;
+                activeMiniGame.active = true;
+                activeMiniGame.parachuteActive = false;
+                activeMiniGame.parachuteMatchIdx = 0;
+                activeMiniGame.parachuteMissed = 0;
+                activeMiniGame.parachuteScore = 0;
+                activeMiniGame.parachuteTotalDrops = 0;
+                activeMiniGame.parachutePosition = {0, 0};
+                activeMiniGame.parachuteReverseMode = (parachuteModeSelection == 1); // 1=Morse→Letter
+                
+                // Adjust speed based on mode: slower for morse→letter mode
+                if (activeMiniGame.parachuteReverseMode) {
+                    activeMiniGame.parachuteSpeed = 50.0f; // Much slower for morse→letter
+                } else {
+                    activeMiniGame.parachuteSpeed = 100.0f; // Normal speed for letter→morse
+                }
+                
+                currentInput = "";
+                parachuteConfigStep = 0;
+                minigameLaunchedFrom = MINIGAME_MENU;
+                state = MINI_GAME;
+                return;
+            }
+            if (IsKeyPressed(KEY_ESCAPE)) {
+                parachuteConfigStep = 0;
+                return;
+            }
+        }
+    } else {
+        // Main minigame selection menu
+        if (IsKeyPressed(KEY_DOWN)) {
+            minigameMenuSelection = (minigameMenuSelection + 1) % 3; // 3 minigames: Time Attack, Defuse Protocol, Parachute Drop
+        }
+        if (IsKeyPressed(KEY_UP)) {
+            minigameMenuSelection = (minigameMenuSelection - 1 + 3) % 3;
+        }
+        
+        if (IsKeyPressed(KEY_ENTER)) {
+            if (minigameMenuSelection == 0) {
+                // Time Attack - start configuration
+                timeAttackConfigStep = 1;
+                timeAttackDurationSelection = 0;
+                timeAttackModeSelection = 0;
+            } else if (minigameMenuSelection == 1) {
+                // Defuse Protocol - start configuration
+                defuseConfigStep = 1;
+                defuseModeSelection = 0;
+            } else if (minigameMenuSelection == 2) {
+                // Parachute Drop - start configuration
+                parachuteConfigStep = 1;
+                parachuteModeSelection = 0;
+            }
+            return;
+        }
+        
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            state = PROGRESS_SCREEN;
+        }
+    }
+}
+
+void GameEngine::UpdateMinigameGate() {
+    // Check if both requirements are met
+    bool defusePassed = player.activeUser.defusePassed;
+    bool timeAttackPassed = player.activeUser.timeAttackBest >= 30.0f;
+    bool canProceed = defusePassed && timeAttackPassed;
+    
+    int maxSelection = canProceed ? 2 : 1; // 0=Time Attack, 1=Defuse, 2=Proceed (if unlocked)
+    
+    if (IsKeyPressed(KEY_DOWN)) {
+        minigameGateSelection = (minigameGateSelection + 1) % (maxSelection + 1);
+    }
+    if (IsKeyPressed(KEY_UP)) {
+        minigameGateSelection = (minigameGateSelection - 1 + maxSelection + 1) % (maxSelection + 1);
+    }
+    
+    if (IsKeyPressed(KEY_ENTER)) {
+        int currentIdx = (tempLevelIdx >= 0) ? tempLevelIdx : player.activeUser.reverseLevelIdx;
+        if (minigameGateSelection == 0) {
+            // Time Attack - Letter→Morse only
+            activeMiniGame.type = MINIGAME_TIME_ATTACK;
+            activeMiniGame.active = true;
+            activeMiniGame.timer = 0.0f;
+            activeMiniGame.timeAttackDuration = 60.0f; // Fixed 60 seconds
+            activeMiniGame.timeAttackTimer = 60.0f;
+            activeMiniGame.timeAttackScore = 0;
+            activeMiniGame.timeAttackInput = "";
+            activeMiniGame.timeAttackReverseMode = false; // Letter→Morse only
+            activeMiniGame.timeAttackTarget = levelSequence[GetRandomValue(0, 25)];
+            minigameLaunchedFrom = MINIGAME_GATE; // Track that we came from minigame gate
+            state = MINI_GAME;
+        } else if (minigameGateSelection == 1) {
+            // Defuse Protocol - Letter→Morse only  
+            // activeMiniGame.isLevelII = false;
+            activeMiniGame.defuseUsesLetterInput = false; // Shows letters, expects morse
+            minigameLaunchedFrom = MINIGAME_GATE; // Track that we came from minigame gate
+            StartMiniGame(MINIGAME_DEFUSE);
+        } else if (minigameGateSelection == 2 && canProceed) {
+            // Proceed to Reverse Mode
+            // if (player.activeUser.currentLetterIdx + 1 == levelSequence.size()) {            
+                if (tempLevelIdx >= 0 && player.activeUser.reverseLevelIdx == 0) {
+                    player.activeUser.reverseLevelIdx = 0;
+                    tempLevelIdx = -1;
+                    tempReverseLevelIdx = -1;
+                }
+                else if(tempLevelIdx >=0){
+                    tempLevelIdx=-1;
+                    tempReverseLevelIdx = 0; // Use actual progress
+                }
+                else {
+                    player.activeUser.reverseLevelIdx = 0;
+                    // Use actual progress
+                }
+                player.SaveProgress();
+                // currentIdx = 0;
+            // } 
+            // else
+            // {
+            //     currentIdx = player.activeUser.reverseLevelIdx;
+
+            // }  
+            isReverseMode = true;
+            state = REVERSE_STUDY;
+        }
+    }
+    
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        isPaused = true;
+        stateBeforePause = state;
+        pauseMenuSelection = 0;
+        return;
+    }
+}
+
+void GameEngine::UpdateMinigameGateReverse() {
+    // Check if both requirements are met (reverse mode - morse to letter)
+    bool defusePassed = player.activeUser.defusePassedReverse;
+    bool timeAttackPassed = player.activeUser.timeAttackBestReverse >= 20.0f;
+    bool canProceed = defusePassed && timeAttackPassed;
+    
+    int maxSelection = canProceed ? 3 : 1; // 0=Time Attack, 1=Defuse, 2=Final Game 1, 3=Final Game 2 (if unlocked)
+    
+    if (IsKeyPressed(KEY_DOWN)) {
+        minigameGateReverseSelection = (minigameGateReverseSelection + 1) % (maxSelection + 1);
+    }
+    if (IsKeyPressed(KEY_UP)) {
+        minigameGateReverseSelection = (minigameGateReverseSelection - 1 + maxSelection + 1) % (maxSelection + 1);
+    }
+    
+    if (IsKeyPressed(KEY_ENTER)) {
+        if (minigameGateReverseSelection == 0) {
+            // Time Attack - Morse→Letter only
+            activeMiniGame.type = MINIGAME_TIME_ATTACK;
+            activeMiniGame.active = true;
+            activeMiniGame.timer = 0.0f;
+            activeMiniGame.timeAttackDuration = 60.0f; // Fixed 60 seconds
+            activeMiniGame.timeAttackTimer = 60.0f;
+            activeMiniGame.timeAttackScore = 0;
+            activeMiniGame.timeAttackInput = "";
+            activeMiniGame.timeAttackReverseMode = true; // Morse→Letter
+            activeMiniGame.timeAttackTarget = levelSequence[GetRandomValue(0, 25)];
+            minigameLaunchedFrom = MINIGAME_GATE_REVERSE; // Track that we came from reverse gate
+            state = MINI_GAME;
+        } else if (minigameGateReverseSelection == 1) {
+            // Defuse Protocol - Morse→Letter only  
+            // activeMiniGame.isLevelII = false;
+            activeMiniGame.defuseUsesLetterInput = true; // Shows morse, expects letters
+            minigameLaunchedFrom = MINIGAME_GATE_REVERSE; // Track that we came from reverse gate
+            StartMiniGame(MINIGAME_DEFUSE);
+        } else if (minigameGateReverseSelection == 2 && canProceed) {
+            // Proceed to Final Level 1: Beeps and Baaps
+            activeMiniGame.beepsPhase = 0;
+            activeMiniGame.beepsRound = 0;
+            activeMiniGame.beepsCorrectCount = 0;
+            activeMiniGame.beepsUserInput = "";
+            activeMiniGame.beepsIsPlaying = false;
+            activeMiniGame.beepsSoundTimer = 0;
+            activeMiniGame.beepsSoundIndex = 0;
+            activeMiniGame.beepsDelay = 0.8f;
+            activeMiniGame.beepsTargetLetter = levelSequence[GetRandomValue(0, 25)];
+            activeMiniGame.beepsWrongAttempts = 0;
+            activeMiniGame.beepsReady = false;
+            activeMiniGame.beepsShowAnswer = false;
+            PauseMusicStream(res.bgMusic);
+            state = FINAL_GAME_1;
+        } else if (minigameGateReverseSelection == 3 && canProceed) {
+            // Proceed to Final Level 2: Light Code
+            state = FINAL_GAME_2;
+        }
+    }
+    
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        isPaused = true;
+        stateBeforePause = state;
+        pauseMenuSelection = 0;
+        return;
+    }
+}
+
+void GameEngine::UpdateStudy() {
+    // Check for pause
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        isPaused = true;
+        stateBeforePause = state;
+        pauseMenuSelection = 0;
+        return;
+    }
+    
+    if (GetKeyPressed() != 0) {
+        state = TEST_MODE;
+        currentInput = "";
+        wrongAttempts = 0;
+    }
+}
+
+void GameEngine::UpdateTest() {
+    // Check for pause
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        isPaused = true;
+        stateBeforePause = state;
+        pauseMenuSelection = 0;
+        return;
+    }
+    
+    // Use temp level if set, otherwise use actual progress
+    int currentIdx = (tempLevelIdx >= 0) ? tempLevelIdx : player.activeUser.currentLetterIdx;
+    
+    bool inputReceived = false;
+
+    if (IsKeyPressed(KEY_LEFT_CONTROL) || IsKeyPressed(KEY_RIGHT_CONTROL)) {
+        currentInput += ".";
+        PlaySound(res.sndDot);
+        inputReceived = true;
+    } else if (IsKeyPressed(KEY_SPACE)) {
+        currentInput += "-";
+        PlaySound(res.sndDash);
+        inputReceived = true;
+    }
+
+    if (inputReceived) {
+        char target = levelSequence[currentIdx % levelSequence.size()];
+        if (currentInput == morseTable[target]) {
+            PlaySound(res.sndSuccess);
+            fx.Explode({640, 360}, COLOR_SUCCESS);
+            
+            // Only advance actual progress if we're at or beyond current max
+            if (tempLevelIdx >= 0) {
+                if(tempLevelIdx >= player.activeUser.currentLetterIdx) {
+                    // Playing at or beyond max progress - advance normally
+                    player.activeUser.currentLetterIdx = tempLevelIdx + 1;
+                    tempLevelIdx = -1; // Reset temp to use actual progress
+                    state = LEVEL_UP;
+                    player.AddXP(100);
+                    wrongAttempts = 0;
+                }
+                else{
+                    // Replaying old level - advance temp but don't update actual progress
+                    tempLevelIdx++;
+                    if (tempLevelIdx >= player.activeUser.currentLetterIdx){
+                        // Caught up to actual progress, switch to normal mode and advance
+                        player.activeUser.currentLetterIdx = tempLevelIdx + 1;
+                        tempLevelIdx = -1;
+                    }
+                    state = LEVEL_UP;
+                    player.AddXP(50); // Reduced XP for replaying
+                    wrongAttempts = 0;
+                }
+            } 
+            else{
+                // Normal progression (continue button)
+                player.activeUser.currentLetterIdx ++;
+                state = LEVEL_UP;
+                player.AddXP(100);
+                wrongAttempts = 0;
+            }
+            player.SaveProgress();
+        } else if (currentInput.length() >= morseTable[target].length()) {
+            currentInput = ""; // Auto-reset on wrong sequence length
+            fx.Explode({640, 360}, RED); 
+            wrongAttempts++;
+        }
+    }
+}
+
+void GameEngine::UpdateLevelUp() {
+    // Check for pause (if not in failed mini-game retry state)
+    if (!lastMiniGameFailed && IsKeyPressed(KEY_ESCAPE)) {
+        isPaused = true;
+        stateBeforePause = state;
+        pauseMenuSelection = 0;
+        return;
+    }
+    
+    // If this LevelUp was reached because the Defuse mini-game failed, allow immediate retry
+    if (lastMiniGameFailed) {
+        // Accept Enter/Space or any key to retry
+        if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || GetKeyPressed() != 0) {
+            lastMiniGameFailed = false;
+            StartMiniGame(MINIGAME_DEFUSE);
+            return;
+        } else {
+            return; // wait for retry input
+        }
+    }
+
+    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+        // Use temp level if set, otherwise use actual progress
+        //int currentIdx = (tempLevelIdx >= 0) ? tempLevelIdx : player.activeUser.currentLetterIdx;
+        
+        // Check for Stage End
+        bool stageEnd = false;
+        int startRange = 0, endRange = 0;
+
+        if (currentIdx == 5) { stageEnd = true; startRange = 0; endRange = 5; }       // End of Stage 1
+        else if (currentIdx == 11) { stageEnd = true; startRange = 6; endRange = 11; } // End of Stage 2
+        else if (currentIdx == 18) { stageEnd = true; startRange = 12; endRange = 18; } // End of Stage 3
+        else if (currentIdx == 25) { stageEnd = true; startRange = 19; endRange = 25; } // End of Stage 4
+
+        if (stageEnd && !isStageCleared) {
+            // Prepare Stage Test
+            // Phase 1: All Letters in Stage (Random Order)
+            // Phase 2: 5 Random Words
+
+            stageTestQueue.clear();
+            std::vector<int> letterIndices;
+            for (int i = startRange; i <= endRange; i++) letterIndices.push_back(i);
+            
+            std::random_device rd;
+            std::mt19937 g(rd());
+            
+            // Phase 1: Shuffle Letters
+            std::shuffle(letterIndices.begin(), letterIndices.end(), g);
+            for (int idx : letterIndices) stageTestQueue.push_back(idx);
+
+            // Phase 2: Add 5 "Word" markers (represented by -1)
+            for (int i = 0; i < 5; i++) stageTestQueue.push_back(-1);
+            
+            stageTestCurrentIdx = 0;
+            state = STAGE_TEST;
+            currentInput = "";
+            wrongAttempts = 0;
+            activeFallingWord.active = false;
+            stageTestFailures = 0;
+            currentStageStartIdx = startRange;
+        }
+        else {
+           
+            // if (currentIdx + 1>= levelSequence.size()) {
+            //     // Completed all training letters: go to minigame gate
+            //     minigameGateSelection = 0;
+            //     state = MINIGAME_GATE;
+            //     if (tempLevelIdx < 0)
+            //     {   
+            //         player.activeUser.currentLetterIdx = levelSequence.size(); 
+            //         player.SaveProgress();
+            //     }
+            //     else tempLevelIdx = levelSequence.size();
+            // } else {
+            //     // Continue to next letter
+            //     state = STUDY_MODE;
+            //     if (tempLevelIdx < 0)
+            //     {   player.activeUser.currentLetterIdx = currentIdx; 
+            //         player.SaveProgress();
+            //     }
+            //     else tempLevelIdx++;
+            // }
+            // isStageCleared = false; // Reset flag for next time
+
+                        // Normal Progression
+            if (currentIdx + 1 >= levelSequence.size()) {
+                // Completed reverse mode: go to reverse minigame gate
+                if (tempLevelIdx < 0){   
+                    player.activeUser.currentLetterIdx = levelSequence.size();
+                    player.SaveProgress();
+                }
+                tempLevelIdx = levelSequence.size()-1;
+                currentIdx = tempLevelIdx;
+                isReverseMode = false;
+                minigameGateSelection = 0;
+                state = MINIGAME_GATE;
+            } else {
+                if (tempLevelIdx < 0)
+                {   player.activeUser.currentLetterIdx = currentIdx + 1;
+                    player.SaveProgress();
+                }
+                else {
+                    tempLevelIdx++;
+                    // Check if we've caught up to actual progress
+                    if (tempLevelIdx >= player.activeUser.currentLetterIdx) {
+                        player.activeUser.currentLetterIdx = tempLevelIdx + 1;
+                        player.SaveProgress();
+                        tempLevelIdx = -1; // Reset temp
+                    }
+                }
+                //currentIdx = tempLevelIdx;
+                state = STUDY_MODE;
+            }
+            isStageCleared = false;
+        }
+    }
+}
+
+void GameEngine::UpdateStageTest() {
+    // Check for pause
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        isPaused = true;
+        stateBeforePause = state;
+        pauseMenuSelection = 0;
+        return;
+    }
+    
+    float dt = GetFrameTime();
+    int currentIdx = (tempLevelIdx >= 0) ? tempLevelIdx : player.activeUser.currentLetterIdx;
+    // 1. Spawn Logic
+    if (!activeFallingWord.active) {
+        if (stageTestCurrentIdx < stageTestQueue.size()) {
+            int queueItem = stageTestQueue[stageTestCurrentIdx];
+            
+            if (queueItem >= 0) {
+                // Phase 1: Single Letter (stored as 1-char word)
+                char c = levelSequence[queueItem];
+                activeFallingWord.word = std::string(1, c);
+            } else {
+                // Phase 2: Full Word
+                int limit = 5;
+                if (currentIdx > 5) limit = 11;
+                if (currentIdx > 11) limit = 18;
+                if (currentIdx > 18) limit = 25;
+                activeFallingWord.word = GetRandomWordForLevel(limit);
+            }
+
+            activeFallingWord.currentMatchIdx = 0;
+            activeFallingWord.position = { (float)GetRandomValue(100, 1000), -60.0f };
+            activeFallingWord.speed = 100.0f; 
+            activeFallingWord.active = true;
+            currentInput = ""; 
+        } else {
+            // Stage Cleared!
+            state = LEVEL_UP;
+            isStageCleared = true;
+            player.AddXP(500);
+            return;
+        }
+    }
+
+    // 2. Update Physics
+    if (activeFallingWord.active) {
+        activeFallingWord.position.y += activeFallingWord.speed * dt;
+        
+        // Fail Condition: Hits ground
+        if (activeFallingWord.position.y > 720) {
+            fx.Explode(activeFallingWord.position, RED);
+            stageTestFailures++;
+
+            if (stageTestFailures >= 2) {
+                // Failed Stage - Restart Learning
+                state = STUDY_MODE;
+                if (tempLevelIdx < 0){
+                    player.activeUser.currentLetterIdx= currentStageStartIdx;
+                    player.SaveProgress();
+                }
+                else tempLevelIdx = currentStageStartIdx;
+                activeFallingWord.active = false;
+                return;
+            }
+
+            // Move to next (count as missed but continue)
+            activeFallingWord.active = false;
+            stageTestCurrentIdx++;
+            currentInput = "";
+        }
+    }
+
+    // 3. Input Logic
+    bool inputReceived = false;
+    if (IsKeyPressed(KEY_LEFT_CONTROL) || IsKeyPressed(KEY_RIGHT_CONTROL)) {
+        currentInput += ".";
+        PlaySound(res.sndDot);
+        inputReceived = true;
+    } else if (IsKeyPressed(KEY_SPACE)) {
+        currentInput += "-";
+        PlaySound(res.sndDash);
+        inputReceived = true;
+    }
+
+    if (inputReceived && activeFallingWord.active) {
+        char target = activeFallingWord.word[activeFallingWord.currentMatchIdx];
+        
+        if (currentInput == morseTable[target]) {
+            // Correct Letter!
+            PlaySound(res.sndSuccess); 
+            activeFallingWord.currentMatchIdx++;
+            currentInput = ""; 
+
+            // Word Complete?
+            if (activeFallingWord.currentMatchIdx >= activeFallingWord.word.length()) {
+                 fx.Explode(activeFallingWord.position, COLOR_GOLD);
+                 activeFallingWord.active = false;
+                 stageTestCurrentIdx++;
+                 player.AddXP(50 * activeFallingWord.word.length());
+                 
+                 // Pure practice mode: No random mini-games here anymore.
+                 // progression is handled in UpdateLevelUp.
+            }
+        } else if (currentInput.length() >= morseTable[target].length()) {
+            // Wrong input
+            currentInput = ""; 
+            fx.Explode(activeFallingWord.position, RED); 
+        }
+    }
+}
+
+void GameEngine::StartMiniGame(MiniGameType type) {
+    // Force only Defuse Protocol as the mini-game implementation.
+    activeMiniGame.type = MINIGAME_DEFUSE;
+    activeMiniGame.active = true;
+    activeMiniGame.timer = 0.0f;
+    activeMiniGame.score = 0;
+    activeMiniGame.letterVisible = true;
+    currentInput = "";
+
+    // Prepare Defuse Protocol
+    std::random_device rd;
+    std::mt19937 g(rd());
+    int maxIdx = player.activeUser.currentLetterIdx;
+    if (maxIdx >= levelSequence.size()) maxIdx = (int)levelSequence.size() - 1;
+
+    // Initialize rounds
+    activeMiniGame.defuseRounds = 3; // practice rounds
+    activeMiniGame.defuseRoundIndex = 0;
+    activeMiniGame.roundPauseTimer = 0.0f;
+
+    auto initRound = [&](int roundIdx) {
+        activeMiniGame.defuseLetters.clear();
+        // Slightly increase letters with each round
+        int baseCount = 5;
+        int lettersCount = baseCount + roundIdx; 
+        for (int i = 0; i < lettersCount; i++) {
+            activeMiniGame.defuseLetters.push_back(levelSequence[GetRandomValue(0, maxIdx)]);
+        }
+        activeMiniGame.defuseIndex = 0;
+        activeMiniGame.bombTimer = 0.0f; // legacy/unused accumulator
+        activeMiniGame.bombCountdown = 20.0f;
+        activeMiniGame.bombInitialCountdown = activeMiniGame.bombCountdown;
+        activeMiniGame.bombActive = true;
+        activeMiniGame.pendingSuccessTimer = 0.0f;
+        activeMiniGame.defuseWrongAttempts = 0; // reset wrong attempts for new round
+    };
+
+    initRound(0);
+    // default to morse-input mode; callers may enable letter-input mode after StartMiniGame
+    activeMiniGame.defuseUsesLetterInput = false;
+
+    state = MINI_GAME;
+}
+
+void GameEngine::UpdateMiniGame() {
+    // Check for pause
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        isPaused = true;
+        stateBeforePause = state;
+        pauseMenuSelection = 0;
+        return;
+    }
+    
+    float dt = GetFrameTime();
+    activeMiniGame.timer += dt;
+    switch (activeMiniGame.type) {
+        case MINIGAME_DEFUSE: {
+            // Handle delayed success beep playback
+            if (activeMiniGame.pendingSuccessTimer > 0.0f) {
+                activeMiniGame.pendingSuccessTimer -= dt;
+                if (activeMiniGame.pendingSuccessTimer <= 0.0f) {
+                    PlaySound(res.sndSuccess);
+                    activeMiniGame.pendingSuccessTimer = 0.0f;
+                }
+            }
+
+            // Bomb countdown with accelerating beep
+            if (activeMiniGame.bombActive) {
+                // tick down
+                activeMiniGame.bombCountdown -= dt;
+
+                // Explosion check
+                if (activeMiniGame.bombCountdown <= 0.0f) {
+                    // Bomb detonated: play explosion, mark mini-game failure and show LevelUp failure screen
+                    activeMiniGame.bombActive = false;
+                    PlaySound(res.sndExplosion);
+                    fx.Explode({640, 360}, RED);
+                    activeMiniGame.active = false;
+                    // record failure
+                    lastMiniGameFailed = true;
+                    isStageCleared = false;
+                    state = LEVEL_UP;
+                    break;
+                }
+            }
+
+            if (activeMiniGame.defuseUsesLetterInput) {
+                int key = GetCharPressed();
+                while (key > 0) {
+                    if ((key >= 'A' && key <= 'Z') || (key >= 'a' && key <= 'z')) {
+                        char inputChar = (char)toupper(key);
+                        char target = activeMiniGame.defuseLetters[activeMiniGame.defuseIndex];
+                        if (inputChar == target) {
+                            // schedule success beep shortly after visual feedback
+                            activeMiniGame.pendingSuccessTimer = 0.12f;
+                            fx.Explode({640, 360}, COLOR_SUCCESS);
+                            player.AddXP(150);
+                            activeMiniGame.defuseIndex++;
+                            // reset wrong attempts on success
+                            activeMiniGame.defuseWrongAttempts = 0;
+
+                            // Round completion
+                            if (activeMiniGame.defuseIndex >= activeMiniGame.defuseLetters.size()) {
+                                activeMiniGame.pendingSuccessTimer = 0.20f;
+                                fx.Explode({640, 360}, COLOR_GOLD);
+                                player.AddXP(200);
+
+                                if (activeMiniGame.defuseRoundIndex + 1 < activeMiniGame.defuseRounds) {
+                                    activeMiniGame.defuseRoundIndex++;
+                                    int maxIdx = player.activeUser.currentLetterIdx;
+                                    if (maxIdx >= levelSequence.size()) maxIdx = (int)levelSequence.size() - 1;
+                                    activeMiniGame.defuseLetters.clear();
+                                    int baseCount = 5;
+                                    int lettersCount = baseCount + activeMiniGame.defuseRoundIndex;
+                                    for (int i = 0; i < lettersCount; i++) {
+                                        activeMiniGame.defuseLetters.push_back(levelSequence[GetRandomValue(0, maxIdx)]);
+                                    }
+                                    activeMiniGame.defuseIndex = 0;
+                                    activeMiniGame.bombCountdown = 15.0f;
+                                    activeMiniGame.bombActive = true;
+                                    activeMiniGame.defuseWrongAttempts = 0;
+                                } else {
+                                    // All rounds completed — final success
+                                    activeMiniGame.bombActive = false;
+                                    player.AddXP(500);
+                                    activeMiniGame.active = false;
+                                    
+                                    // Mark defuse as passed based on mode
+                                    if (activeMiniGame.defuseUsesLetterInput) {
+                                        // Morse→Letter (reverse mode)
+                                        player.activeUser.defusePassedReverse = true;
+                                    } else {
+                                        // Letter→Morse (normal mode)
+                                        player.activeUser.defusePassed = true;
+                                    }
+                                    player.SaveProgress();
+                                    
+                                    // Return to where the minigame was launched from
+                                    state = minigameLaunchedFrom;
+                                }
+                            }
+                        } else {
+                            // Wrong letter input: increment wrong-attempts counter
+                            activeMiniGame.defuseWrongAttempts++;
+                            fx.Explode({640, 360}, RED);
+                        }
+                    }
+                    key = GetCharPressed();
+                }
+            } else {
+                // Morse input handling for current defuse letter
+                bool inputReceived = false;
+                if (IsKeyPressed(KEY_LEFT_CONTROL) || IsKeyPressed(KEY_RIGHT_CONTROL)) {
+                    currentInput += ".";
+                    PlaySound(res.sndDot);
+                    inputReceived = true;
+                } else if (IsKeyPressed(KEY_SPACE)) {
+                    currentInput += "-";
+                    PlaySound(res.sndDash);
+                    inputReceived = true;
+                }
+
+                if (inputReceived && activeMiniGame.bombActive) {
+                    char target = activeMiniGame.defuseLetters[activeMiniGame.defuseIndex];
+                    if (currentInput == morseTable[target]) {
+                        // schedule success beep shortly after visual feedback
+                        activeMiniGame.pendingSuccessTimer = 0.12f;
+                        fx.Explode({640, 360}, COLOR_SUCCESS);
+                        player.AddXP(150);
+                        activeMiniGame.defuseIndex++;
+                        currentInput = "";
+
+                        if (activeMiniGame.defuseIndex >= activeMiniGame.defuseLetters.size()) {
+                            // Round completed (schedule success beep)
+                            activeMiniGame.pendingSuccessTimer = 0.20f;
+                            fx.Explode({640, 360}, COLOR_GOLD);
+                            player.AddXP(200);
+
+                            // Advance to next round if available
+                            if (activeMiniGame.defuseRoundIndex + 1 < activeMiniGame.defuseRounds) {
+                                activeMiniGame.defuseRoundIndex++;
+                                // regenerate letters for next round (increase count slightly)
+                                int maxIdx = player.activeUser.currentLetterIdx;
+                                if (maxIdx >= levelSequence.size()) maxIdx = (int)levelSequence.size() - 1;
+                                activeMiniGame.defuseLetters.clear();
+                                int baseCount = 5;
+                                int lettersCount = baseCount + activeMiniGame.defuseRoundIndex;
+                                for (int i = 0; i < lettersCount; i++) {
+                                    activeMiniGame.defuseLetters.push_back(levelSequence[GetRandomValue(0, maxIdx)]);
+                                }
+                                activeMiniGame.defuseIndex = 0;
+                                activeMiniGame.bombCountdown = 15.0f;
+                                activeMiniGame.bombActive = true;
+                                    activeMiniGame.defuseWrongAttempts = 0;
+                                currentInput = "";
+                            } else {
+                                // All rounds completed — final success
+                                activeMiniGame.bombActive = false;
+                                player.AddXP(500);
+                                activeMiniGame.active = false;
+                                
+                                // Mark defuse as passed based on mode
+                                if (activeMiniGame.defuseUsesLetterInput) {
+                                    // Morse→Letter (reverse mode)
+                                    player.activeUser.defusePassedReverse = true;
+                                } else {
+                                    // Letter→Morse (normal mode)
+                                    player.activeUser.defusePassed = true;
+                                }
+                                player.SaveProgress();
+                                
+                                // Return to where the minigame was launched from
+                                state = minigameLaunchedFrom;
+                            }
+                        }
+                    } else if (currentInput.length() >= morseTable[target].length()) {
+                        currentInput = "";
+                        fx.Explode({640, 360}, RED);
+                    }
+                }
+            }
+            break;
+        }
+        case MINIGAME_TIME_ATTACK: {
+            // Countdown timer
+            activeMiniGame.timeAttackTimer -= dt;
+            
+            // Game over when time runs out
+            if (activeMiniGame.timeAttackTimer <= 0.0f) {
+                // Calculate letters per minute
+                float timeElapsed = activeMiniGame.timeAttackDuration; // in seconds
+                float lettersPerMinute = (activeMiniGame.timeAttackScore / timeElapsed) * 60.0f;
+                
+                // Save high score based on mode
+                if (activeMiniGame.timeAttackReverseMode) {
+                    // Reverse mode (Morse→Letter)
+                    if (lettersPerMinute > player.activeUser.timeAttackBestReverse) {
+                        player.activeUser.timeAttackBestReverse = lettersPerMinute;
+                        player.SaveProgress();
+                    }
+                } else {
+                    // Normal mode (Letter→Morse)
+                    if (lettersPerMinute > player.activeUser.timeAttackBest) {
+                        player.activeUser.timeAttackBest = lettersPerMinute;
+                        player.SaveProgress();
+                    }
+                }
+                
+                // Return to appropriate screen
+                activeMiniGame.active = false;
+                // Return to where the minigame was launched from
+                state = minigameLaunchedFrom;
+                break;
+            }
+            
+            // Handle input based on mode
+            if (activeMiniGame.timeAttackReverseMode) {
+                // Morse → Letter mode: user types letters
+                int key = GetCharPressed();
+                while (key > 0) {
+                    if ((key >= 'A' && key <= 'Z') || (key >= 'a' && key <= 'z')) {
+                        char inputChar = (char)toupper(key);
+                        char target = activeMiniGame.timeAttackTarget;
+                        
+                        if (inputChar == target) {
+                            // Correct!
+                            activeMiniGame.timeAttackScore++;
+                            PlaySound(res.sndSuccess);
+                            fx.Explode({640, 360}, COLOR_SUCCESS);
+                            
+                            // Pick next random letter
+                            activeMiniGame.timeAttackTarget = levelSequence[GetRandomValue(0, 25)];
+                        } else {
+                            // Wrong!
+                            fx.Explode({640, 360}, RED);
+                        }
+                    }
+                    key = GetCharPressed();
+                }
+            } else {
+                // Letter → Morse mode: user types morse code
+                bool inputReceived = false;
+                if (IsKeyPressed(KEY_LEFT_CONTROL) || IsKeyPressed(KEY_RIGHT_CONTROL)) {
+                    activeMiniGame.timeAttackInput += ".";
+                    PlaySound(res.sndDot);
+                    inputReceived = true;
+                } else if (IsKeyPressed(KEY_SPACE)) {
+                    activeMiniGame.timeAttackInput += "-";
+                    PlaySound(res.sndDash);
+                    inputReceived = true;
+                }
+                
+                if (inputReceived) {
+                    char target = activeMiniGame.timeAttackTarget;
+                    if (activeMiniGame.timeAttackInput == morseTable[target]) {
+                        // Correct!
+                        activeMiniGame.timeAttackScore++;
+                        activeMiniGame.timeAttackInput = "";
+                        PlaySound(res.sndSuccess);
+                        fx.Explode({640, 360}, COLOR_SUCCESS);
+                        
+                        // Pick next random letter from A-Z (all 26 letters)
+                        activeMiniGame.timeAttackTarget = levelSequence[GetRandomValue(0, 25)];
+                    } else if (activeMiniGame.timeAttackInput.length() >= morseTable[target].length()) {
+                        // Wrong!
+                        activeMiniGame.timeAttackInput = "";
+                        fx.Explode({640, 360}, RED);
+                    }
+                }
+            }
+            break;
+        }
+        case MINIGAME_PARACHUTE: {
+            float dt = GetFrameTime();
+            
+            // Spawn new parachute drop
+            if (!activeMiniGame.parachuteActive) {
+                // Decide whether to spawn letter or word
+                bool spawnWord = (activeMiniGame.parachuteTotalDrops >= 26) && (GetRandomValue(0, 100) < 40); // 40% chance of word after 26 letters
+                
+                if (spawnWord) {
+                    // Spawn 3-4 letter word
+                    int wordLength = GetRandomValue(3, 4);
+                    activeMiniGame.parachuteWord = "";
+                    for (int i = 0; i < wordLength; i++) {
+                        activeMiniGame.parachuteWord += levelSequence[GetRandomValue(0, 25)];
+                    }
+                } else {
+                    // Spawn single random letter
+                    activeMiniGame.parachuteWord = std::string(1, levelSequence[GetRandomValue(0, 25)]);
+                }
+                
+                activeMiniGame.parachuteMatchIdx = 0;
+                activeMiniGame.parachutePosition = {(float)GetRandomValue(100, 1000), -60.0f};
+                // Speed already set during initialization based on mode
+                activeMiniGame.parachuteActive = true;
+                activeMiniGame.parachuteTotalDrops++;
+                currentInput = "";
+            }
+            
+            // Update physics
+            if (activeMiniGame.parachuteActive) {
+                activeMiniGame.parachutePosition.y += activeMiniGame.parachuteSpeed * dt;
+                
+                // Check if hit ground
+                if (activeMiniGame.parachutePosition.y > 720) {
+                    fx.Explode(activeMiniGame.parachutePosition, RED);
+                    activeMiniGame.parachuteMissed++;
+                    activeMiniGame.parachuteActive = false;
+                    
+                    // Game over if missed 10
+                    if (activeMiniGame.parachuteMissed >= 10) {
+                        activeMiniGame.active = false;
+                        
+                        // Return to minigame menu or progress screen
+                        if (minigameLaunchedFrom == MINIGAME_MENU) {
+                            state = PROGRESS_SCREEN;
+                        } else {
+                            state = PROGRESS_SCREEN;
+                        }
+                    }
+                }
+            }
+            
+            // Input handling - check mode
+            if (activeMiniGame.parachuteReverseMode) {
+                // Morse→Letter mode: user types letters for shown morse
+                int key = GetCharPressed();
+                while (key > 0 && activeMiniGame.parachuteActive) {
+                    if ((key >= 'A' && key <= 'Z') || (key >= 'a' && key <= 'z')) {
+                        char inputChar = (char)toupper(key);
+                        char target = activeMiniGame.parachuteWord[activeMiniGame.parachuteMatchIdx];
+                        
+                        if (inputChar == target) {
+                            // Correct letter!
+                            PlaySound(res.sndSuccess);
+                            activeMiniGame.parachuteMatchIdx++;
+                            
+                            // Word complete?
+                            if (activeMiniGame.parachuteMatchIdx >= activeMiniGame.parachuteWord.length()) {
+                                fx.Explode(activeMiniGame.parachutePosition, COLOR_SUCCESS);
+                                activeMiniGame.parachuteActive = false;
+                                activeMiniGame.parachuteScore++;
+                                player.AddXP(50 * activeMiniGame.parachuteWord.length());
+                            }
+                        } else {
+                            // Wrong input
+                            fx.Explode(activeMiniGame.parachutePosition, RED);
+                        }
+                    }
+                    key = GetCharPressed();
+                }
+            } else {
+                // Letter→Morse mode: user types morse for shown letters
+                bool inputReceived = false;
+                if (IsKeyPressed(KEY_LEFT_CONTROL) || IsKeyPressed(KEY_RIGHT_CONTROL)) {
+                    currentInput += ".";
+                    PlaySound(res.sndDot);
+                    inputReceived = true;
+                } else if (IsKeyPressed(KEY_SPACE)) {
+                    currentInput += "-";
+                    PlaySound(res.sndDash);
+                    inputReceived = true;
+                }
+                
+                if (inputReceived && activeMiniGame.parachuteActive) {
+                    char target = activeMiniGame.parachuteWord[activeMiniGame.parachuteMatchIdx];
+                    
+                    if (currentInput == morseTable[target]) {
+                        // Correct letter!
+                        PlaySound(res.sndSuccess);
+                        activeMiniGame.parachuteMatchIdx++;
+                        currentInput = "";
+                        
+                        // Word complete?
+                        if (activeMiniGame.parachuteMatchIdx >= activeMiniGame.parachuteWord.length()) {
+                            fx.Explode(activeMiniGame.parachutePosition, COLOR_SUCCESS);
+                            activeMiniGame.parachuteActive = false;
+                            activeMiniGame.parachuteScore++;
+                            player.AddXP(50 * activeMiniGame.parachuteWord.length());
+                        }
+                    } else if (currentInput.length() >= morseTable[target].length()) {
+                        // Wrong input
+                        currentInput = "";
+                        fx.Explode(activeMiniGame.parachutePosition, RED);
+                    }
+                }
+            }
+            
+            break;
+        }
+        default:
+            activeMiniGame.active = false;
+            state = STAGE_TEST;
+            break;
+    }
+}
+
+void GameEngine::UpdateReverseStudy() {
+    // Check for pause
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        isPaused = true;
+        stateBeforePause = state;
+        pauseMenuSelection = 0;
+        return;
+    }
+    
+    if (GetKeyPressed() != 0) {
+        state = REVERSE_TEST;
+        currentInput = "";
+        wrongAttempts = 0;
+    }
+}
+
+void GameEngine::UpdateReverseTest() {
+    // Check for pause
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        isPaused = true;
+        stateBeforePause = state;
+        pauseMenuSelection = 0;
+        return;
+    }
+    
+    // Use temp level if set, otherwise use actual progress
+    int currentIdx = (tempReverseLevelIdx >= 0) ? tempReverseLevelIdx : player.activeUser.reverseLevelIdx;
+    
+    // In reverse mode: user sees morse code and types the LETTER
+    int key = GetCharPressed();
+    while (key > 0) {
+        if ((key >= 'A' && key <= 'Z') || (key >= 'a' && key <= 'z')) {
+            char inputChar = (char)toupper(key);
+            char targetChar = levelSequence[currentIdx];
+            
+            if (inputChar == targetChar) {
+                // Correct!
+                PlaySound(res.sndSuccess);
+                fx.Explode({640, 360}, COLOR_SUCCESS);
+                
+                // Only advance actual progress if we're at or beyond current max
+                if (tempReverseLevelIdx >= 0 && tempReverseLevelIdx >= player.activeUser.reverseLevelIdx) {
+                    // Playing at or beyond max progress - advance normally
+                    player.activeUser.reverseLevelIdx = tempReverseLevelIdx + 1;
+                    tempReverseLevelIdx = -1; // reset temp
+                    state = REVERSE_LEVEL_UP;
+                    player.AddXP(100);
+                    wrongAttempts = 0;
+                } else if (tempReverseLevelIdx < 0) {
+                    // Normal progression (continue button)
+                    player.activeUser.reverseLevelIdx++;
+                    state = REVERSE_LEVEL_UP;
+                    player.AddXP(100);
+                    wrongAttempts = 0;
+                } else {
+                    // Replaying old level - advance temp but don't update actual progress
+                    tempReverseLevelIdx++;
+                    if (tempReverseLevelIdx >= player.activeUser.reverseLevelIdx) {
+                        // Caught up to actual progress, switch to normal mode and advance
+                        player.activeUser.reverseLevelIdx = tempReverseLevelIdx + 1;
+                        tempReverseLevelIdx = -1;
+                    }
+                    state = REVERSE_LEVEL_UP;
+                    player.AddXP(50); // Reduced XP for replaying
+                    wrongAttempts = 0;
+                }
+            } else {
+                // Wrong
+                fx.Explode({640, 360}, RED);
+                wrongAttempts++;
+            }
+        }
+        key = GetCharPressed();
+    }
+}
+
+void GameEngine::UpdateReverseLevelUp() {
+    // Check for pause
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        isPaused = true;
+        stateBeforePause = state;
+        pauseMenuSelection = 0;
+        return;
+    }
+    
+    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+        // Use temp level if set, otherwise use actual progress
+        int currentIdx = (tempReverseLevelIdx >= 0) ? tempReverseLevelIdx : player.activeUser.reverseLevelIdx;
+        
+        // Check for Stage End
+        bool stageEnd = false;
+        int startRange = 0, endRange = 0;
+
+        if (currentIdx == 5) { stageEnd = true; startRange = 0; endRange = 5; }
+        else if (currentIdx == 11) { stageEnd = true; startRange = 6; endRange = 11; }
+        else if (currentIdx == 18) { stageEnd = true; startRange = 12; endRange = 18; }
+        else if (currentIdx == 25) { stageEnd = true; startRange = 19; endRange = 25; }
+
+        if (stageEnd && !isStageCleared) {
+            // Prepare Reverse Stage Test
+            stageTestQueue.clear();
+            std::vector<int> letterIndices;
+            for (int i = startRange; i <= endRange; i++) letterIndices.push_back(i);
+            
+            std::random_device rd;
+            std::mt19937 g(rd());
+            
+            // Phase 1: Shuffle Letters
+            std::shuffle(letterIndices.begin(), letterIndices.end(), g);
+            for (int idx : letterIndices) stageTestQueue.push_back(idx);
+
+            // Phase 2: Add 5 "Word" markers
+            for (int i = 0; i < 5; i++) stageTestQueue.push_back(-1);
+            
+            stageTestCurrentIdx = 0;
+            state = REVERSE_STAGE_TEST;
+            currentInput = "";
+            wrongAttempts = 0;
+            activeFallingWord.active = false;
+            stageTestFailures = 0;
+            currentStageStartIdx = startRange;
+        } else {
+            // Normal Progression
+            if (currentIdx + 1 >= levelSequence.size()) {
+                // Completed reverse mode: go to reverse minigame gate
+                if (tempReverseLevelIdx < 0){   
+                    player.activeUser.reverseLevelIdx = levelSequence.size();
+                    player.SaveProgress();
+                }
+                tempReverseLevelIdx = levelSequence.size()-1;
+                currentIdx = tempReverseLevelIdx;
+                isReverseMode = false;
+                minigameGateReverseSelection = 0;
+                state = MINIGAME_GATE_REVERSE;
+            } else {
+                if (tempReverseLevelIdx < 0)
+                {   player.activeUser.reverseLevelIdx += 1;
+                    player.SaveProgress();
+                }
+                else {
+                    tempReverseLevelIdx++;
+                    // Check if we've caught up to actual progress
+                    if (tempReverseLevelIdx >= player.activeUser.reverseLevelIdx) {
+                        player.activeUser.reverseLevelIdx = tempReverseLevelIdx + 1;
+                        player.SaveProgress();
+                        tempReverseLevelIdx = -1; // Reset temp
+                    }
+                }
+                //currentIdx = tempReverseLevelIdx;
+                state = REVERSE_STUDY;
+            }
+            isStageCleared = false;
+        }
+    }
+}
+
+void GameEngine::UpdateReverseStageTest() {
+    // Check for pause
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        isPaused = true;
+        stateBeforePause = state;
+        pauseMenuSelection = 0;
+        return;
+    }
+    
+    float dt = GetFrameTime();
+    int currentIdx = (tempReverseLevelIdx >= 0) ? tempReverseLevelIdx : player.activeUser.reverseLevelIdx;
+        
+    // 1. Spawn Logic
+    if (!activeFallingWord.active) {
+        if (stageTestCurrentIdx < stageTestQueue.size()) {
+            int queueItem = stageTestQueue[stageTestCurrentIdx];
+            
+            if (queueItem >= 0) {
+                // Phase 1: Single Letter
+                char c = levelSequence[queueItem];
+                activeFallingWord.word = std::string(1, c);
+            } else {
+                // Phase 2: Full Word
+                int limit = 5;
+                if (currentIdx > 5) limit = 11;
+                if (currentIdx > 11) limit = 18;
+                if (currentIdx > 18) limit = 25;
+                activeFallingWord.word = GetRandomWordForLevel(limit);
+            }
+
+            activeFallingWord.currentMatchIdx = 0;
+            activeFallingWord.position = { (float)GetRandomValue(100, 1000), -60.0f };
+            activeFallingWord.speed = 60.0f; // Slower for reverse mode
+            activeFallingWord.active = true;
+            currentInput = "";
+        } else {
+            // Stage Cleared!
+            state = REVERSE_LEVEL_UP;
+            isStageCleared = true;
+            player.AddXP(500);
+            return;
+        }
+    }
+
+    // 2. Update Physics
+    if (activeFallingWord.active) {
+        activeFallingWord.position.y += activeFallingWord.speed * dt;
+        
+        // Fail Condition
+        if (activeFallingWord.position.y > 720) {
+            fx.Explode(activeFallingWord.position, RED);
+            stageTestFailures++;
+
+            if (stageTestFailures >= 2) {
+                // Failed - restart this stage
+                state = REVERSE_STUDY;
+                
+                if( tempReverseLevelIdx < 0 )
+                {   
+                    player.activeUser.reverseLevelIdx = currentStageStartIdx;
+                    player.SaveProgress();
+                }
+                currentIdx = currentStageStartIdx;
+                activeFallingWord.active = false;
+                return;
+            }
+
+            activeFallingWord.active = false;
+            stageTestCurrentIdx++;
+            currentInput = "";
+        }
+    }
+
+    // 3. Input Logic - Type LETTERS (not morse)
+    int key = GetCharPressed();
+    while (key > 0 && activeFallingWord.active) {
+        if ((key >= 'A' && key <= 'Z') || (key >= 'a' && key <= 'z')) {
+            char inputChar = (char)toupper(key);
+            char targetChar = activeFallingWord.word[activeFallingWord.currentMatchIdx];
+            
+            if (inputChar == targetChar) {
+                // Correct Letter!
+                PlaySound(res.sndSuccess);
+                activeFallingWord.currentMatchIdx++;
+                
+                // Word Complete?
+                if (activeFallingWord.currentMatchIdx >= activeFallingWord.word.length()) {
+                    fx.Explode(activeFallingWord.position, COLOR_GOLD);
+                    activeFallingWord.active = false;
+                    stageTestCurrentIdx++;
+                    player.AddXP(50 * activeFallingWord.word.length());
+                }
+            } else {
+                // Wrong letter
+                fx.Explode(activeFallingWord.position, RED);
+            }
+        }
+        key = GetCharPressed();
+    }
+}
+
+void GameEngine::UpdatePauseMenu() {
+    // Handle menu navigation
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_UP)) {
+        pauseMenuSelection = 1 - pauseMenuSelection; // Toggle between 0 and 1
+    }
+    
+    // ESC to resume game
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        isPaused = false;
+        state = stateBeforePause;
+        return;
+    }
+    
+    if (IsKeyPressed(KEY_ENTER)) {
+        if (pauseMenuSelection == 0) {
+            // Continue - resume game
+            isPaused = false;
+            state = stateBeforePause;
+        } else {
+            // Return to Menu - go back to progress screen
+            isPaused = false;
+            // Resume music if returning from Final Game 1 and music is not manually muted
+            if (stateBeforePause == FINAL_GAME_1 && !isMusicMuted) {
+                ResumeMusicStream(res.bgMusic);
+            }
+            state = PROGRESS_SCREEN;
+            progressScreenSelection = 0;
+            // Reset any active game state
+            currentInput = "";
+            wrongAttempts = 0;
+            activeFallingWord.active = false;
+            // Reset temp level indices when returning to menu
+            tempLevelIdx = -1;
+            tempReverseLevelIdx = -1;
+            currentIdx=0;
+        }
+    }
+}
+
+void GameEngine::UpdateFinalGame1() {
+    float dt = GetFrameTime();
+    
+    // Check for pause
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        isPaused = true;
+        stateBeforePause = state;
+        pauseMenuSelection = 0;
+        return;
+    }
+    
+    // Wait for user to be ready
+    if (!activeMiniGame.beepsReady) {
+        if (IsKeyPressed(KEY_ENTER)) {
+            activeMiniGame.beepsReady = true;
+            activeMiniGame.beepsIsPlaying = true;
+            activeMiniGame.beepsSoundTimer = 0;
+            activeMiniGame.beepsSoundIndex = 0;
+            activeMiniGame.beepsDelay = 0.8f; // Initial delay before first sound
+        }
+        return;
+    }
+    
+    // Handle morse code playback
+    if (activeMiniGame.beepsIsPlaying) {
+        activeMiniGame.beepsSoundTimer += dt;
+        
+        std::string morseCode;
+        if (activeMiniGame.beepsPhase == 0) {
+            // Letters phase
+            morseCode = morseTable[activeMiniGame.beepsTargetLetter];
+        } else {
+            // Words phase
+            morseCode = "";
+            for (char c : activeMiniGame.beepsTargetWord) {
+                morseCode += morseTable[c] + " ";
+            }
+        }
+        
+        // Play morse sounds with better delays
+        if (activeMiniGame.beepsSoundIndex < morseCode.length()) {
+            if (activeMiniGame.beepsSoundTimer >= activeMiniGame.beepsDelay) {
+                activeMiniGame.beepsSoundTimer = 0;
+                char symbol = morseCode[activeMiniGame.beepsSoundIndex];
+                
+                if (symbol == '.') {
+                    PlaySound(res.sndDot);
+                    activeMiniGame.beepsDelay = 0.5f; // Pause after dot
+                } else if (symbol == '-') {
+                    PlaySound(res.sndDash);
+                    activeMiniGame.beepsDelay = 0.5f; // Pause after dash
+                } else if (symbol == ' ') {
+                    activeMiniGame.beepsDelay = 1.0f; // Longer pause between letters in words
+                }
+                
+                activeMiniGame.beepsSoundIndex++;
+            }
+        } else {
+            // Finished playing
+            activeMiniGame.beepsIsPlaying = false;
+            activeMiniGame.beepsSoundIndex = 0;
+            activeMiniGame.beepsSoundTimer = 0;
+        }
+        return; // Don't accept input while playing
+    }
+    
+    // Handle text input
+    int key = GetCharPressed();
+    while (key > 0) {
+        if ((key >= 'A' && key <= 'Z') || (key >= 'a' && key <= 'z')) {
+            activeMiniGame.beepsUserInput += (char)toupper(key);
+        }
+        key = GetCharPressed();
+    }
+    
+    if (IsKeyPressed(KEY_BACKSPACE) && activeMiniGame.beepsUserInput.length() > 0) {
+        activeMiniGame.beepsUserInput.pop_back();
+    }
+    
+    // Handle replay (R key)
+    if (IsKeyPressed(KEY_R) && IsKeyPressed(KEY_LEFT_SHIFT)) {
+        activeMiniGame.beepsIsPlaying = true;
+        activeMiniGame.beepsSoundTimer = 0;
+        activeMiniGame.beepsSoundIndex = 0;
+        activeMiniGame.beepsDelay = 0.8f;
+        return;
+    }
+    
+    // Handle submit
+    if (IsKeyPressed(KEY_ENTER) && activeMiniGame.beepsUserInput.length() > 0) {
+        bool correct = false;
+        
+        if (activeMiniGame.beepsPhase == 0) {
+            // Letters phase - check single letter
+            if (activeMiniGame.beepsUserInput.length() == 1 && 
+                activeMiniGame.beepsUserInput[0] == activeMiniGame.beepsTargetLetter) {
+                correct = true;
+            }
+        } else {
+            // Words phase - check word
+            if (activeMiniGame.beepsUserInput == activeMiniGame.beepsTargetWord) {
+                correct = true;
+            }
+        }
+        
+        if (correct) {
+            PlaySound(res.sndSuccess);
+            fx.Explode({640, 360}, COLOR_SUCCESS);
+            activeMiniGame.beepsCorrectCount++;
+            activeMiniGame.beepsRound++;
+            activeMiniGame.beepsUserInput = "";
+            activeMiniGame.beepsWrongAttempts = 0;
+            activeMiniGame.beepsShowAnswer = false;
+            
+            // Check phase transition
+            if (activeMiniGame.beepsPhase == 0 && activeMiniGame.beepsRound >= 15) {
+                // Move to words phase
+                activeMiniGame.beepsPhase = 1;
+                activeMiniGame.beepsRound = 0;
+                
+                // Famous words list
+                std::vector<std::string> famousWords = {"SOS", "HELP", "MAYDAY", "ROGER", "COPY", "OVER"};
+                activeMiniGame.beepsTargetWord = famousWords[GetRandomValue(0, famousWords.size() - 1)];
+            } else if (activeMiniGame.beepsPhase == 1 && activeMiniGame.beepsRound >= 5) {
+                // Completed game!
+                player.activeUser.finalLevelsCompleted = 1;
+                player.SaveProgress();
+                if (!isMusicMuted) ResumeMusicStream(res.bgMusic);
+                state = PROGRESS_SCREEN;
+                return;
+            } else if (activeMiniGame.beepsPhase == 0) {
+                // Next letter
+                activeMiniGame.beepsTargetLetter = levelSequence[GetRandomValue(0, 25)];
+            } else {
+                // Next word
+                std::vector<std::string> famousWords = {"SOS", "HELP", "MAYDAY", "ROGER", "COPY", "OVER"};
+                activeMiniGame.beepsTargetWord = famousWords[GetRandomValue(0, famousWords.size() - 1)];
+            }
+            
+            // Ask if ready for next
+            activeMiniGame.beepsReady = false;
+        } else {
+            // Wrong answer
+            fx.Explode({640, 360}, RED);
+            activeMiniGame.beepsWrongAttempts++;
+            activeMiniGame.beepsUserInput = "";
+            
+            // After 3 wrong attempts, show answer and apply penalty
+            if (activeMiniGame.beepsWrongAttempts >= 3) {
+                activeMiniGame.beepsShowAnswer = true;
+                
+                // Apply penalty: move back 3 questions
+                if (activeMiniGame.beepsPhase == 0) {
+                    // Letters phase
+                    activeMiniGame.beepsRound = std::max(0, activeMiniGame.beepsRound - 3);
+                    activeMiniGame.beepsTargetLetter = levelSequence[GetRandomValue(0, 25)];
+                } else {
+                    // Words phase
+                    activeMiniGame.beepsRound = std::max(0, activeMiniGame.beepsRound - 3);
+                    std::vector<std::string> famousWords = {"SOS", "HELP", "MAYDAY", "ROGER", "COPY", "OVER"};
+                    activeMiniGame.beepsTargetWord = famousWords[GetRandomValue(0, famousWords.size() - 1)];
+                }
+                
+                activeMiniGame.beepsWrongAttempts = 0;
+                
+                // Wait for user acknowledgment
+                activeMiniGame.beepsReady = false;
+            }
+        }
+    }
+}
+
+void GameEngine::UpdateFinalGame2() {
+    // Check for pause
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        isPaused = true;
+        stateBeforePause = state;
+        pauseMenuSelection = 0;
+        return;
+    }
+    
+    float dt = GetFrameTime();
+    
+    // Initialize first round
+    if (activeMiniGame.lightCodeRound == 0 && !activeMiniGame.lightCodeReady) {
+        activeMiniGame.lightCodePhase = 0; // Start with letters phase
+        activeMiniGame.lightCodeRound = 1;
+        activeMiniGame.lightCodeCorrect = 0;
+        activeMiniGame.lightCodeWrong = 0;
+        activeMiniGame.lightCodeInput = "";
+        activeMiniGame.lightCodeReady = false; // User must confirm they're ready
+        activeMiniGame.lightCodePlaying = false;
+        activeMiniGame.lightCodeTarget = levelSequence[GetRandomValue(0, 25)];
+        activeMiniGame.lightCodeMorse = morseTable[activeMiniGame.lightCodeTarget];
+    }
+    
+    // If not ready, wait for user confirmation with ENTER
+    if (!activeMiniGame.lightCodeReady) {
+        if (IsKeyPressed(KEY_ENTER)) {
+            activeMiniGame.lightCodeReady = true;
+            // Automatically start playing light pattern
+            activeMiniGame.lightCodePlaying = true;
+            activeMiniGame.lightCodeIndex = 0;
+            activeMiniGame.lightCodeTimer = 0;
+            activeMiniGame.lightCodeOn = false;
+            activeMiniGame.lightCodeDelay = 0.8f;
+            activeMiniGame.lightCodeInput = "";
+        }
+        return;
+    }
+    
+    // SHIFT+R to replay the light pattern
+    if ((IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) && IsKeyPressed(KEY_R)) {
+        activeMiniGame.lightCodePlaying = true;
+        activeMiniGame.lightCodeIndex = 0;
+        activeMiniGame.lightCodeTimer = 0;
+        activeMiniGame.lightCodeOn = false;
+        activeMiniGame.lightCodeDelay = 0.8f;
+        activeMiniGame.lightCodeInput = "";
+        return;
+    }
+    
+    // Playing morse code light pattern
+    if (activeMiniGame.lightCodePlaying) {
+        activeMiniGame.lightCodeTimer += dt;
+        
+        // If in delay between elements
+        if (activeMiniGame.lightCodeDelay > 0) {
+            activeMiniGame.lightCodeDelay -= dt;
+            if (activeMiniGame.lightCodeDelay <= 0) {
+                activeMiniGame.lightCodeOn = true;
+                activeMiniGame.lightCodeTimer = 0;
+            }
+            return;
+        }
+        
+        // Check if current element is complete
+        if (activeMiniGame.lightCodeIndex < activeMiniGame.lightCodeMorse.length()) {
+            char symbol = activeMiniGame.lightCodeMorse[activeMiniGame.lightCodeIndex];
+            float duration = (symbol == '.') ? 0.4f : 1.2f; // dot = 0.4s, dash = 1.2s (slower)
+            
+            if (activeMiniGame.lightCodeTimer >= duration) {
+                activeMiniGame.lightCodeOn = false;
+                activeMiniGame.lightCodeIndex++;
+                
+                // Check if we just finished the last element
+                if (activeMiniGame.lightCodeIndex >= activeMiniGame.lightCodeMorse.length()) {
+                    // Finished playing morse code
+                    activeMiniGame.lightCodePlaying = false;
+                } else {
+                    activeMiniGame.lightCodeDelay = 0.6f; // Longer delay between elements
+                }
+                activeMiniGame.lightCodeTimer = 0;
+            }
+        } else {
+            // Safety fallback - should not reach here
+            activeMiniGame.lightCodePlaying = false;
+            activeMiniGame.lightCodeOn = false;
+        }
+        return; // Don't handle input while playing
+    }
+    
+    // Handle user input (letter keys) - only when not playing
+    if (!activeMiniGame.lightCodePlaying) {
+        // Famous morse code signals with their morse patterns
+        const char* famousSignals[] = {"SOS", "MAYDAY", "CQD", "HELP", "OK"};
+        const char* signalMorse[] = {"...---...", "--.--.-.--", "-.-.--.-.", ".......-.....", "---.-"};  
+        
+        // Phase 0: Single letters - type in input box and press ENTER
+        if (activeMiniGame.lightCodePhase == 0) {
+            // Allow typing single letter into input box
+            for (int i = 0; i < 26; i++) {
+                if (IsKeyPressed(KEY_A + i)) {
+                    char inputChar = 'A' + i;
+                    activeMiniGame.lightCodeInput = std::string(1, inputChar); // Replace with single letter
+                    break;
+                }
+            }
+            
+            // Backspace to clear
+            if (IsKeyPressed(KEY_BACKSPACE)) {
+                activeMiniGame.lightCodeInput = "";
+            }
+            
+            // ENTER to submit answer
+            if (IsKeyPressed(KEY_ENTER) && !activeMiniGame.lightCodeInput.empty()) {
+                char inputChar = activeMiniGame.lightCodeInput[0];
+                
+                if (inputChar == activeMiniGame.lightCodeTarget) {
+                    // Correct answer - play success sound
+                    PlaySound(res.sndSuccess);
+                    activeMiniGame.lightCodeCorrect++;
+                    activeMiniGame.lightCodeRound++;
+                    activeMiniGame.lightCodeWrong = 0;
+                    
+                    // Check if completed 15 letters, move to phase 1
+                    if (activeMiniGame.lightCodeCorrect >= 15) {
+                        activeMiniGame.lightCodePhase = 1;
+                        activeMiniGame.lightCodeCorrect = 0; // Reset for signals
+                        activeMiniGame.lightCodeRound = 1;
+                        // Start first signal
+                        int signalIdx = 0;
+                        activeMiniGame.lightCodeTargetSignal = famousSignals[signalIdx];
+                        activeMiniGame.lightCodeMorse = signalMorse[signalIdx];
+                        activeMiniGame.lightCodeInput = "";
+                        activeMiniGame.lightCodeReady = false;
+                    } else {
+                        // Next letter
+                        activeMiniGame.lightCodeTarget = levelSequence[GetRandomValue(0, 25)];
+                        activeMiniGame.lightCodeMorse = morseTable[activeMiniGame.lightCodeTarget];
+                        activeMiniGame.lightCodeInput = "";
+                        activeMiniGame.lightCodeReady = false;
+                    }
+                } else {
+                    // Wrong answer in letter phase
+                    activeMiniGame.lightCodeWrong++;
+                    if (activeMiniGame.lightCodeWrong >= 3) {
+                        // Move back 3 letters as penalty
+                        activeMiniGame.lightCodeCorrect = std::max(0, activeMiniGame.lightCodeCorrect - 3);
+                        activeMiniGame.lightCodeRound++;
+                        activeMiniGame.lightCodeWrong = 0;
+                        activeMiniGame.lightCodeTarget = levelSequence[GetRandomValue(0, 25)];
+                        activeMiniGame.lightCodeMorse = morseTable[activeMiniGame.lightCodeTarget];
+                        activeMiniGame.lightCodeInput = "";
+                        activeMiniGame.lightCodeReady = false;
+                    } else {
+                        activeMiniGame.lightCodeInput = ""; // Clear for retry
+                    }
+                }
+            }
+        }
+        
+        // Phase 1: Famous signals - handle text input
+        if (activeMiniGame.lightCodePhase == 1) {
+            // Handle typed input for signal names
+            for (int i = 0; i < 26; i++) {
+                if (IsKeyPressed(KEY_A + i)) {
+                    char inputChar = 'A' + i;
+                    activeMiniGame.lightCodeInput += inputChar;
+                    break;
+                }
+            }
+            
+            // Backspace to delete
+            if (IsKeyPressed(KEY_BACKSPACE) && !activeMiniGame.lightCodeInput.empty()) {
+                activeMiniGame.lightCodeInput.pop_back();
+            }
+            
+            // Enter to submit signal guess
+            if (IsKeyPressed(KEY_ENTER) && !activeMiniGame.lightCodeInput.empty()) {
+                if (activeMiniGame.lightCodeInput == activeMiniGame.lightCodeTargetSignal) {
+                    // Correct signal - play success sound
+                    PlaySound(res.sndSuccess);
+                    activeMiniGame.lightCodeCorrect++;
+                    activeMiniGame.lightCodeRound++;
+                    activeMiniGame.lightCodeWrong = 0;
+                    
+                    // Check if completed all 5 signals
+                    if (activeMiniGame.lightCodeCorrect >= 5) {
+                        player.activeUser.finalLevelsCompleted = 2;
+                        player.SaveProgress();
+                        state = PROGRESS_SCREEN;
+                        return;
+                    }
+                    
+                    // Next signal
+                    int signalIdx = activeMiniGame.lightCodeCorrect;
+                    activeMiniGame.lightCodeTargetSignal = famousSignals[signalIdx];
+                    activeMiniGame.lightCodeMorse = signalMorse[signalIdx];
+                    activeMiniGame.lightCodeInput = "";
+                    activeMiniGame.lightCodeReady = false;
+                } else {
+                    // Wrong signal
+                    activeMiniGame.lightCodeWrong++;
+                    if (activeMiniGame.lightCodeWrong >= 3) {
+                        // Move back 3 signals as penalty (but not below 0)
+                        activeMiniGame.lightCodeCorrect = std::max(0, activeMiniGame.lightCodeCorrect - 3);
+                        activeMiniGame.lightCodeRound++;
+                        activeMiniGame.lightCodeWrong = 0;
+                        int signalIdx = activeMiniGame.lightCodeCorrect;
+                        if (signalIdx < 5) {
+                            activeMiniGame.lightCodeTargetSignal = famousSignals[signalIdx];
+                            activeMiniGame.lightCodeMorse = signalMorse[signalIdx];
+                        }
+                        activeMiniGame.lightCodeInput = "";
+                        activeMiniGame.lightCodeReady = false;
+                    } else {
+                        activeMiniGame.lightCodeInput = ""; // Clear for retry
+                    }
+                }
+            }
+        }
+    }
+}
+
+void GameEngine::UpdateAboutScreen() {
+    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER)) {
+        state = PROGRESS_SCREEN;
+        bottomButtonSelection = -1;
+        progressScreenSelection = 0;
+    }
+}
+
+void GameEngine::UpdateCreditsScreen() {
+    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER)) {
+        state = PROGRESS_SCREEN;
+        bottomButtonSelection = -1;
+        progressScreenSelection = 0;
+    }
+}
+
+void GameEngine::Draw() {
+    BeginDrawing();
+    ClearBackground(COLOR_BACKGROUND);
+    
+    Vector2 shake = { (float)GetRandomValue(-fx.GetShake(), fx.GetShake()), 
+                      (float)GetRandomValue(-fx.GetShake(), fx.GetShake()) };
+
+    switch (state) {
+        case LOGIN_SCREEN: DrawLoginGUI(); break;
+        case PROGRESS_SCREEN: DrawProgressScreenGUI(); break;
+        case LEVEL_SELECT: DrawLevelSelectGUI(); break;
+        case MINIGAME_MENU: DrawMinigameMenuGUI(); break;
+        case MINIGAME_GATE: DrawMinigameGateGUI(); break;
+        case MINIGAME_GATE_REVERSE: DrawMinigameGateReverseGUI(); break;
+        case STUDY_MODE:   DrawStudyGUI(shake); break;
+        case TEST_MODE:    DrawTestGUI(shake); break;
+        case LEVEL_UP:     DrawLevelUpGUI(); break;
+        case STAGE_TEST:   DrawStageTestGUI(shake); break;
+        case MINI_GAME:    DrawMiniGame(); break;
+        case REVERSE_STUDY: DrawReverseStudyGUI(shake); break;
+        case REVERSE_TEST:  DrawReverseTestGUI(shake); break;
+        case REVERSE_LEVEL_UP: DrawReverseLevelUpGUI(); break;
+        case REVERSE_STAGE_TEST: DrawReverseStageTestGUI(shake); break;
+        case FINAL_GAME_1: DrawFinalGame1GUI(); break;
+        case FINAL_GAME_2: DrawFinalGame2GUI(); break;
+        case ABOUT_SCREEN: DrawAboutScreenGUI(); break;
+        case CREDITS_SCREEN: DrawCreditsScreenGUI(); break;
+    }
+
+    fx.UpdateAndDraw();
+    
+    // Draw pause menu overlay if paused
+    if (isPaused) {
+        DrawPauseMenu();
+    }
+    
+    EndDrawing();
+}
+
+// --- GUI RENDERING METHODS ---
+
+void GameEngine::DrawLoginGUI() {
+    // Draw background
+    DrawTexturePro(res.bgGeneral, 
+        {0, 0, (float)res.bgGeneral.width, (float)res.bgGeneral.height},
+        {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+        {0, 0}, 0, WHITE);
+    
+    // Title and subtitle
+    DrawTextCentered("MORSE MASTER", 120, 70, 2, COLOR_ACCENT);
+    DrawTextCentered("Learn a Secret Language of Dots and Dashes", 220, 28, 2, (Color){180, 180, 180, 255});
+    
+    if (showSignupPrompt) {
+        // Larger signup prompt
+        DrawRectangleRounded({340, 280, 600, 240}, 0.2f, 10, Fade(BLACK, 0.9f));
+        Rectangle signupRect = {340.0f, 280.0f, 600.0f, 240.0f};
+        DrawRectangleLinesEx(signupRect, 2, RED);
+        
+        DrawTextCentered("IDENTITY UNKNOWN", 310, 42, 2, RED);
+        DrawTextCentered("INITIALIZE NEW OPERATOR?", 370, 30, 2, WHITE);
+        DrawTextCentered(TextFormat("> %s <", loginInput), 420, 36, 2, COLOR_GOLD);
+        DrawTextCentered("[ENTER] CONFIRM   [ESC] CANCEL", 475, 24, 2, GRAY);
+    } else {
+        // Larger input box
+        DrawRectangleRounded({390, 310, 500, 80}, 0.2f, 10, Fade(BLACK, 0.7f));
+        Rectangle inputRect = {390.0f, 310.0f, 500.0f, 80.0f};
+        DrawRectangleLinesEx(inputRect, 2, COLOR_GOLD);
+        DrawTextCentered(std::string(loginInput), 335, 36, 2, WHITE);
+        DrawTextCentered("TYPE OPERATOR ID & PRESS ENTER", 410, 20, 2, GRAY);
+    }
+    
+    // Draw Rank Table (Decorative) - Two Column Format
+    // DrawTextCentered("CLEARANCE LEVELS", 470, 22, 2, COLOR_GOLD);
+    
+    float leftCol = 280;
+    float rightCol = 720;
+    float yPos = 510;
+    float lineHeight = 24;
+    
+    // // Left Column (Levels 0-28)
+    // DrawTextEx(res.font, "Lv 0-2:   SIGNAL CADET", {leftCol, yPos}, 16, 2, GRAY);
+    // yPos += lineHeight;
+    // DrawTextEx(res.font, "Lv 3-5:   SIGNAL TRAINEE", {leftCol, yPos}, 16, 2, GRAY);
+    // yPos += lineHeight;
+    // DrawTextEx(res.font, "Lv 6-9:   RADIO APPRENTICE", {leftCol, yPos}, 16, 2, GRAY);
+    // yPos += lineHeight;
+    // DrawTextEx(res.font, "Lv 10-13: MORSE OPERATOR", {leftCol, yPos}, 16, 2, GRAY);
+    // yPos += lineHeight;
+    // DrawTextEx(res.font, "Lv 14-17: CIPHER TECH", {leftCol, yPos}, 16, 2, GRAY);
+    // yPos += lineHeight;
+    // DrawTextEx(res.font, "Lv 18-21: CODE SPECIALIST", {leftCol, yPos}, 16, 2, GRAY);
+    // yPos += lineHeight;
+    // DrawTextEx(res.font, "Lv 22-25: SIGNAL MASTER", {leftCol, yPos}, 16, 2, GRAY);
+    // yPos += lineHeight;
+    // DrawTextEx(res.font, "Lv 26-27: GATEKEEPER", {leftCol, yPos}, 16, 2, GRAY);
+    
+    // // Right Column (Levels 28-58)
+    // yPos = 510;
+    // DrawTextEx(res.font, "Lv 28-31: CIPHER INVERTER", {rightCol, yPos}, 16, 2, GRAY);
+    // yPos += lineHeight;
+    // DrawTextEx(res.font, "Lv 32-39: REVERSE DECODER", {rightCol, yPos}, 16, 2, GRAY);
+    // yPos += lineHeight;
+    // DrawTextEx(res.font, "Lv 40-47: MIRROR OPERATIVE", {rightCol, yPos}, 16, 2, GRAY);
+    // yPos += lineHeight;
+    // DrawTextEx(res.font, "Lv 48-53: DUAL MASTER", {rightCol, yPos}, 16, 2, GRAY);
+    // yPos += lineHeight;
+    // DrawTextEx(res.font, "Lv 54-55: REVERSE SPECIALIST", {rightCol, yPos}, 16, 2, GRAY);
+    // yPos += lineHeight;
+    // DrawTextEx(res.font, "Lv 56-57: FINAL PROTOCOL", {rightCol, yPos}, 16, 2, GRAY);
+    // yPos += lineHeight;
+    // DrawTextEx(res.font, "Lv 58:    \u2605 THE CONDUIT \u2605", {rightCol, yPos}, 16, 2, COLOR_GOLD);
+}
+
+void GameEngine::DrawProgressScreenGUI() {
+    // Draw background
+    DrawTexturePro(res.bgGeneral, 
+        {0, 0, (float)res.bgGeneral.width, (float)res.bgGeneral.height},
+        {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+        {0, 0}, 0, WHITE);
+    
+    // Title
+    DrawTextCentered("OPERATOR STATUS", 60, 50, 2, COLOR_ACCENT);
+    
+    // Main Info Panel - Larger and better organized
+    DrawRectangleRounded({150, 120, 980, 340}, 0.2f, 10, Fade(BLACK, 0.8f));
+    Rectangle infoRect = {150.0f, 120.0f, 980.0f, 340.0f};
+    DrawRectangleLinesEx(infoRect, 2, COLOR_GOLD);
+    
+    // Operator Info Section
+    float yPos = 145;
+    DrawTextCentered(TextFormat("OPERATOR: %s", player.activeUser.name), yPos, 38, 2, WHITE);
+    
+    yPos += 55;
+    DrawTextCentered(TextFormat("RANK: %s", player.activeUser.rankTitle), yPos, 32, 2, COLOR_GOLD);
+    
+    // Progress Bar Section
+    yPos += 60;
+    int overallLevel = player.GetOverallLevel();
+    float progress = (float)(overallLevel) / 58.0f;
+    
+    // Progress bar background
+    float barX = 250;
+    float barY = yPos;
+    float barWidth = 780;
+    float barHeight = 30;
+    DrawRectangleRounded({barX, barY, barWidth, barHeight}, 0.3f, 10, Fade(GRAY, 0.3f));
+    
+    // Progress bar fill
+    if (progress > 0) {
+        DrawRectangleRounded({barX, barY, barWidth * progress, barHeight}, 0.3f, 10, COLOR_ACCENT);
+    }
+    
+    // Progress text on bar
+    DrawTextEx(res.font, TextFormat("LEVEL %d / 58  [%.1f%%]", overallLevel, progress * 100), 
+               {barX + 10, barY + 5}, 22, 2, WHITE);
+    
+    // Detailed Progress Section
+    yPos += 55;
+    int currentLevel = player.activeUser.currentLetterIdx;
+    int reverseLvl = player.activeUser.reverseLevelIdx;
+    int totalLevels = levelSequence.size();
+    
+    // Letter→Morse Progress
+    float col1X = 200;
+    DrawTextEx(res.font, "LETTER→MORSE:", {col1X, yPos}, 24, 2, COLOR_ACCENT);
+    if (currentLevel >= totalLevels) {
+        DrawTextEx(res.font, "COMPLETE", {col1X + 200, yPos}, 24, 2, COLOR_SUCCESS);
+    } else {
+        DrawTextEx(res.font, TextFormat("%d/26 (%c)", currentLevel, levelSequence[currentLevel]), 
+                   {col1X + 200, yPos}, 24, 2, WHITE);
+    }
+    
+    yPos += 35;
+    
+    // Mini-games Progress
+    DrawTextEx(res.font, "MINI-GAMES:", {col1X, yPos}, 24, 2, COLOR_ACCENT);
+    int minigamesCleared = (player.activeUser.defusePassed ? 1 : 0) + (player.activeUser.timeAttackBest > 0 ? 1 : 0);
+    DrawTextEx(res.font, TextFormat("%d/2", minigamesCleared), {col1X + 200, yPos}, 24, 2, 
+               minigamesCleared == 2 ? COLOR_SUCCESS : WHITE);
+    
+    yPos += 35;
+    
+    // Morse→Letter Progress
+    DrawTextEx(res.font, "MORSE→LETTER:", {col1X, yPos}, 24, 2, COLOR_ACCENT);
+    if (reverseLvl >= totalLevels) {
+        DrawTextEx(res.font, "COMPLETE", {col1X + 200, yPos}, 24, 2, COLOR_SUCCESS);
+    } else if (reverseLvl > 0) {
+        DrawTextEx(res.font, TextFormat("%d/26", reverseLvl), {col1X + 200, yPos}, 24, 2, WHITE);
+    } else {
+        DrawTextEx(res.font, "LOCKED", {col1X + 200, yPos}, 24, 2, GRAY);
+    }
+    
+    // Column 2 - Additional Stats
+    float col2X = 680;
+    yPos = 320;
+    
+    DrawTextEx(res.font, "XP EARNED:", {col2X, yPos}, 24, 2, COLOR_ACCENT);
+    DrawTextEx(res.font, TextFormat("%d", player.activeUser.xp), {col2X + 160, yPos}, 24, 2, COLOR_SUCCESS);
+    
+    yPos += 35;
+    DrawTextEx(res.font, "FINAL LEVELS:", {col2X, yPos}, 24, 2, COLOR_ACCENT);
+    DrawTextEx(res.font, TextFormat("%d/2", player.activeUser.finalLevelsCompleted), {col2X + 160, yPos}, 24, 2, 
+               player.activeUser.finalLevelsCompleted > 0 ? COLOR_SUCCESS : GRAY);
+    
+    // Button Panel
+    float buttonY = 480;
+    
+    // Continue Button
+    Color continueColor = (progressScreenSelection == 0) ? COLOR_GOLD : GRAY;
+    DrawRectangleRounded({350, buttonY, 580, 60}, 0.2f, 10, Fade(continueColor, 0.3f));
+    Rectangle continueRect = {350.0f, buttonY, 580.0f, 60.0f};
+    DrawRectangleLinesEx(continueRect, 2, continueColor);
+    DrawTextCentered("CONTINUE MISSION", buttonY + 15, 30, 2, continueColor);
+    
+    // Level Select Button
+    buttonY += 75;
+    Color selectColor = (progressScreenSelection == 1) ? COLOR_GOLD : GRAY;
+    DrawRectangleRounded({350, buttonY, 580, 60}, 0.2f, 10, Fade(selectColor, 0.3f));
+    Rectangle selectRect = {350.0f, buttonY, 580.0f, 60.0f};
+    DrawRectangleLinesEx(selectRect, 2, selectColor);
+    DrawTextCentered("LEVEL SELECTION", buttonY + 15, 30, 2, selectColor);
+    
+    // Minigames Button
+    buttonY += 75;
+    Color minigameColor = (progressScreenSelection == 2) ? COLOR_GOLD : GRAY;
+    DrawRectangleRounded({350, buttonY, 580, 60}, 0.2f, 10, Fade(minigameColor, 0.3f));
+    Rectangle minigameRect = {350.0f, buttonY, 580.0f, 60.0f};
+    DrawRectangleLinesEx(minigameRect, 2, minigameColor);
+    DrawTextCentered("MINIGAMES", buttonY + 15, 30, 2, minigameColor);
+    
+    // Bottom-right buttons (stacked vertically)
+    float bottomButtonY = 520;
+    float bottomButtonW = 180;
+    float bottomButtonH = 50;
+    float bottomButtonSpacing = 10;
+    float bottomButtonX = 1280 - bottomButtonW - 20; // Right-aligned with margin
+    
+    // Switch User button (top)
+    Color switchUserColor = (bottomButtonSelection == 0) ? COLOR_GOLD : GRAY;
+    DrawRectangleRounded({bottomButtonX, bottomButtonY, bottomButtonW, bottomButtonH}, 0.2f, 10, Fade(switchUserColor, 0.3f));
+    Rectangle switchRect = {bottomButtonX, bottomButtonY, bottomButtonW, bottomButtonH};
+    DrawRectangleLinesEx(switchRect, 2, switchUserColor);
+    float switchTextW = MeasureTextEx(res.font, "SWITCH USER", 18, 2).x;
+    DrawTextEx(res.font, "SWITCH USER", {bottomButtonX + (bottomButtonW - switchTextW) / 2, bottomButtonY + 15}, 18, 2, switchUserColor);
+    
+    // About button (middle)
+    bottomButtonY += bottomButtonH + bottomButtonSpacing;
+    Color aboutColor = (bottomButtonSelection == 1) ? COLOR_GOLD : GRAY;
+    DrawRectangleRounded({bottomButtonX, bottomButtonY, bottomButtonW, bottomButtonH}, 0.2f, 10, Fade(aboutColor, 0.3f));
+    Rectangle aboutRect = {bottomButtonX, bottomButtonY, bottomButtonW, bottomButtonH};
+    DrawRectangleLinesEx(aboutRect, 2, aboutColor);
+    float aboutTextW = MeasureTextEx(res.font, "ABOUT", 18, 2).x;
+    DrawTextEx(res.font, "ABOUT", {bottomButtonX + (bottomButtonW - aboutTextW) / 2, bottomButtonY + 15}, 18, 2, aboutColor);
+    
+    // Credits button (bottom)
+    bottomButtonY += bottomButtonH + bottomButtonSpacing;
+    Color creditsColor = (bottomButtonSelection == 2) ? COLOR_GOLD : GRAY;
+    DrawRectangleRounded({bottomButtonX, bottomButtonY, bottomButtonW, bottomButtonH}, 0.2f, 10, Fade(creditsColor, 0.3f));
+    Rectangle creditsRect = {bottomButtonX, bottomButtonY, bottomButtonW, bottomButtonH};
+    DrawRectangleLinesEx(creditsRect, 2, creditsColor);
+    float creditsTextW = MeasureTextEx(res.font, "CREDITS", 18, 2).x;
+    DrawTextEx(res.font, "CREDITS", {bottomButtonX + (bottomButtonW - creditsTextW) / 2, bottomButtonY + 15}, 18, 2, creditsColor);
+    
+    // Instructions
+    DrawTextEx(res.font, "[UP/DOWN] NAVIGATE", {10,620}, 18, 2, GRAY);
+    DrawTextEx(res.font, "[LEFT/RIGHT] SWITCH MENU", {10,645}, 18, 2, GRAY);
+    DrawTextEx(res.font, "[ENTER] CONFIRM", {10,670}, 18, 2, GRAY);
+}
+
+void GameEngine::DrawLevelSelectGUI() {
+    // Draw background
+    DrawTexturePro(res.bgGeneral, 
+        {0, 0, (float)res.bgGeneral.width, (float)res.bgGeneral.height},
+        {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+        {0, 0}, 0, WHITE);
+    
+    DrawTextCentered("LEVEL SELECTION - COMPLETED & UNLOCKED LEVELS", 30, 38, 2, COLOR_ACCENT);
+    
+    int overallLevel = player.GetOverallLevel();
+    // Show completed levels + 1 unlocked level (if available)
+    int maxSelectableLevel = overallLevel;
+    if (overallLevel < 58) {
+        maxSelectableLevel = overallLevel + 1;
+    }
+    
+    // Show overall progress
+    DrawTextCentered(TextFormat("Total Progress: Level %d / 58", overallLevel + 1), 75, 18, 2, COLOR_GOLD);
+    
+    if (maxSelectableLevel == 0) {
+        DrawTextCentered("NO LEVELS COMPLETED YET", 300, 35, 2, RED);
+        DrawTextCentered("COMPLETE LEVELS TO UNLOCK THIS FEATURE", 350, 20, 2, GRAY);
+        DrawTextCentered("[ESC] GO BACK", 420, 25, 2, GRAY);
+        return;
+    }
+    
+    // Draw all completed levels in sections - Centered for better formatting
+    float yPos = 105;
+    float cellSize = 55;
+    float cellSpacing = 6;
+    int columns = 13;
+    float screenWidth = 1280;
+    float totalGridWidth = columns * (cellSize + cellSpacing) - cellSpacing;
+    float startX = (screenWidth - totalGridWidth) / 2.0f;
+    
+    int currentLevelIdx = 0;
+    
+    // === SECTION 1: LETTER→MORSE (0-25) ===
+    int letterMorseCompleted = std::min(player.activeUser.currentLetterIdx, 26);
+    int letterMorseToShow = std::min(letterMorseCompleted + (currentLevelIdx < maxSelectableLevel && letterMorseCompleted < 26 ? 1 : 0), 26);
+    if (letterMorseToShow > 0) {
+        // Center the section header
+        DrawTextCentered(TextFormat("LETTER → MORSE   (%d/26)", letterMorseCompleted), yPos - 2, 18, 2, COLOR_ACCENT);
+        yPos += 22;
+        
+        for (int i = 0; i < letterMorseToShow; i++) {
+            int col = i % columns;
+            int row = i / columns;
+            float x = startX + col * (cellSize + cellSpacing);
+            float y = yPos + row * (cellSize + cellSpacing);
+            
+            bool isCompleted = (i < letterMorseCompleted);
+            Color boxColor = (currentLevelIdx == levelSelectIndex) ? COLOR_GOLD : (isCompleted ? COLOR_ACCENT : GRAY);
+            float alpha = (currentLevelIdx == levelSelectIndex) ? 0.6f : (isCompleted ? 0.25f : 0.15f);
+            
+            Rectangle cellRect = {x, y, cellSize, cellSize};
+            DrawRectangleRounded(cellRect, 0.2f, 8, Fade(boxColor, alpha));
+            DrawRectangleLinesEx(cellRect, 2, boxColor);
+            
+            char letter = levelSequence[i];
+            DrawTextEx(res.font, TextFormat("%c", letter), {x + 17, y + 8}, 26, 2, boxColor);
+            DrawTextEx(res.font, TextFormat("%d", i + 1), {x + 4, y + 38}, 10, 1, WHITE);
+            
+            currentLevelIdx++;
+        }
+        yPos += ((letterMorseToShow - 1) / columns + 1) * (cellSize + cellSpacing) + 18;
+    }
+    
+    // === SECTION 2: MINI-GAMES (26-27) ===
+    int minigamesCompleted = 0;
+    if (player.activeUser.currentLetterIdx >= 26) {
+        if (player.activeUser.defusePassed) minigamesCompleted++;
+        if (player.activeUser.timeAttackBest > 0) minigamesCompleted++;
+    }
+    int minigamesToShow = minigamesCompleted;
+    if (currentLevelIdx < maxSelectableLevel && minigamesCompleted < 2 && player.activeUser.currentLetterIdx >= 26) {
+        minigamesToShow++; // Show next unlocked minigame
+    }
+    
+    if (minigamesToShow > 0) {
+        // Center the section header
+        DrawTextCentered(TextFormat("MINI-GAMES   (%d/2)", minigamesCompleted), yPos - 2, 18, 2, COLOR_GOLD);
+        yPos += 22;
+        
+        const char* minigameNames[] = {"DEFUSE", "TIME ATK"};
+        bool minigamePassed[] = {player.activeUser.defusePassed, player.activeUser.timeAttackBest > 0};
+        
+        // Center the mini-game boxes
+        int displayedCount = minigamesToShow;
+        float minigameWidth = cellSize * 2;
+        float totalMinigameWidth = displayedCount * (minigameWidth + cellSpacing * 2) - cellSpacing * 2;
+        float minigameStartX = (screenWidth - totalMinigameWidth) / 2.0f;
+        
+        int displayIdx = 0;
+        for (int i = 0; i < 2; i++) {
+            if (displayIdx >= minigamesToShow) break;
+            if (!minigamePassed[i] && displayIdx < minigamesCompleted) continue;
+            
+            float x = minigameStartX + displayIdx * (minigameWidth + cellSpacing * 2);
+            float y = yPos;
+            
+            bool isCompleted = minigamePassed[i];
+            Color boxColor = (currentLevelIdx == levelSelectIndex) ? COLOR_GOLD : (isCompleted ? COLOR_SUCCESS : GRAY);
+            float alpha = (currentLevelIdx == levelSelectIndex) ? 0.6f : (isCompleted ? 0.25f : 0.15f);
+            
+            Rectangle cellRect = {x, y, cellSize * 2, cellSize};
+            DrawRectangleRounded(cellRect, 0.2f, 8, Fade(boxColor, alpha));
+            DrawRectangleLinesEx(cellRect, 2, boxColor);
+            
+            DrawTextEx(res.font, minigameNames[i], {x + 12, y + 12}, 18, 2, boxColor);
+            DrawTextEx(res.font, TextFormat("%d", currentLevelIdx + 1), {x + 4, y + 38}, 10, 1, WHITE);
+            
+            currentLevelIdx++;
+            displayIdx++;
+        }
+        yPos += cellSize + cellSpacing + 18;
+    }
+    
+    // === SECTION 3: MORSE→LETTER (28-53) ===
+    int reverseLvlCompleted = player.activeUser.reverseLevelIdx;
+    int reverseLvlToShow = 0;
+    
+    // Check if we should show any reverse levels (overall level 28+)
+    if (overallLevel >= 28 || (overallLevel == 27 && player.activeUser.timeAttackBest > 30)) {
+        // Show completed reverse levels + 1 unlocked if available
+        reverseLvlToShow = std::min(reverseLvlCompleted + 1, 26);
+    }
+    
+    if (reverseLvlToShow > 0) {
+        // Center the section header
+        DrawTextCentered(TextFormat("MORSE → LETTER   (%d/26)", reverseLvlCompleted), yPos - 2, 18, 2, COLOR_ACCENT);
+        yPos += 22;
+        
+        for (int i = 0; i < reverseLvlToShow; i++) {
+            int col = i % columns;
+            int row = i / columns;
+            float x = startX + col * (cellSize + cellSpacing);
+            float y = yPos + row * (cellSize + cellSpacing);
+            
+            bool isCompleted = (i < reverseLvlCompleted);
+            Color boxColor = (currentLevelIdx == levelSelectIndex) ? COLOR_GOLD : (isCompleted ? (Color){100, 200, 255, 255} : GRAY);
+            float alpha = (currentLevelIdx == levelSelectIndex) ? 0.6f : (isCompleted ? 0.25f : 0.15f);
+            
+            DrawRectangleRounded({x, y, cellSize, cellSize}, 0.2f, 8, Fade(boxColor, alpha));
+            Rectangle cellRect = {x, y, cellSize, cellSize};
+            DrawRectangleLinesEx(cellRect, 2, boxColor);
+            
+            char letter = levelSequence[i];
+            std::string morse = morseTable[letter];
+            float morseSize = morse.length() > 3 ? 14.0f : 18.0f;
+            float morseX = morse.length() > 3 ? 7.0f : 10.0f;
+            DrawTextEx(res.font, morse.c_str(), {x + morseX, y + 16}, morseSize, 2, boxColor);
+            DrawTextEx(res.font, TextFormat("%d", currentLevelIdx + 1), {x + 4, y + 38}, 10, 1, WHITE);
+            
+            currentLevelIdx++;
+        }
+        yPos += ((reverseLvlToShow - 1) / columns + 1) * (cellSize + cellSpacing) + 18;
+    }
+    
+    // === SECTION 4: REVERSE MINI-GAMES (54-55) ===
+    int reverseMinigamesCompleted = 0;
+    if (player.activeUser.reverseLevelIdx >= 26) {
+        if (player.activeUser.defusePassedReverse) reverseMinigamesCompleted++;
+        if (player.activeUser.timeAttackBestReverse > 0) reverseMinigamesCompleted++;
+    }
+    int reverseMinigamesToShow = 0;
+    
+    // Check if we should show any reverse minigames (overall level 54+ or reverse letters completed)
+    if (overallLevel >= 54 || player.activeUser.reverseLevelIdx >= 26) {
+        reverseMinigamesToShow = reverseMinigamesCompleted;
+        // Show +1 unlocked if available and not all completed
+        if (reverseMinigamesCompleted < 2 && player.activeUser.reverseLevelIdx >= 26) {
+            reverseMinigamesToShow++;
+        }
+    }
+    
+    if (reverseMinigamesToShow > 0) {
+        // Center the section header
+        DrawTextCentered(TextFormat("REVERSE MINI-GAMES   (%d/2)", reverseMinigamesCompleted), yPos - 2, 18, 2, COLOR_GOLD);
+        yPos += 22;
+        
+        const char* minigameNames[] = {"R-DEFUSE", "R-TIME"};
+        bool minigamePassed[] = {player.activeUser.defusePassedReverse, player.activeUser.timeAttackBestReverse > 0};
+        
+        // Center the reverse mini-game boxes
+        int displayedCount = reverseMinigamesToShow;
+        float minigameWidth = cellSize * 2;
+        float totalMinigameWidth = displayedCount * (minigameWidth + cellSpacing * 2) - cellSpacing * 2;
+        float minigameStartX = (screenWidth - totalMinigameWidth) / 2.0f;
+        
+        int displayIdx = 0;
+        for (int i = 0; i < 2; i++) {
+            if (displayIdx >= reverseMinigamesToShow) break;
+            if (!minigamePassed[i] && displayIdx < reverseMinigamesCompleted) continue;
+            
+            float x = minigameStartX + displayIdx * (minigameWidth + cellSpacing * 2);
+            float y = yPos;
+            
+            bool isCompleted = minigamePassed[i];
+            Color boxColor = (currentLevelIdx == levelSelectIndex) ? COLOR_GOLD : (isCompleted ? (Color){200, 100, 255, 255} : GRAY);
+            float alpha = (currentLevelIdx == levelSelectIndex) ? 0.6f : (isCompleted ? 0.25f : 0.15f);
+            
+            DrawRectangleRounded({x, y, cellSize * 2, cellSize}, 0.2f, 8, Fade(boxColor, alpha));
+            Rectangle cellRect = {x, y, cellSize * 2, cellSize};
+            DrawRectangleLinesEx(cellRect, 2, boxColor);
+            
+            DrawTextEx(res.font, minigameNames[i], {x + 8, y + 12}, 16, 2, boxColor);
+            DrawTextEx(res.font, TextFormat("%d", currentLevelIdx + 1), {x + 4, y + 38}, 10, 1, WHITE);
+            
+            currentLevelIdx++;
+            displayIdx++;
+        }
+        yPos += cellSize + cellSpacing + 18;
+    }
+    
+    // === SECTION 5: FINAL LEVELS (56-57) ===
+    int finalLvlCompleted = player.activeUser.finalLevelsCompleted;
+    bool finalLevelsUnlocked = (player.activeUser.defusePassedReverse && player.activeUser.timeAttackBestReverse >= 20.0f);
+    int finalLvlToShow = 0;
+    
+    // Only show final levels if they're unlocked (both reverse minigames passed)
+    if (finalLevelsUnlocked) {
+        // Show both final levels (they unlock together)
+        finalLvlToShow = 2;
+    } else if (finalLvlCompleted > 0) {
+        // Show already completed finals even if not unlocked (shouldn't happen in normal play)
+        finalLvlToShow = finalLvlCompleted;
+    }
+    
+    if (finalLvlToShow > 0) {
+        // Center the section header
+        DrawTextCentered(TextFormat("FINAL LEVELS   (%d/2)", finalLvlCompleted), yPos - 2, 18, 2,  (Color){255, 203, 0, 255});
+        yPos += 22;
+        
+        // Center the final level boxes
+        float minigameWidth = cellSize * 2;
+        float totalMinigameWidth = finalLvlToShow * (minigameWidth + cellSpacing * 2) - cellSpacing * 2;
+        float minigameStartX = (screenWidth - totalMinigameWidth) / 2.0f;
+        
+        for (int i = 0; i < finalLvlToShow; i++) {
+            float x = minigameStartX + i * (minigameWidth + cellSpacing * 2);
+            float y = yPos;
+            
+            bool isCompleted = (i < finalLvlCompleted);
+            Color boxColor = (currentLevelIdx == levelSelectIndex) ? COLOR_GOLD : (isCompleted ? (Color){255, 203, 0, 255} : GRAY);
+            float alpha = (currentLevelIdx == levelSelectIndex) ? 0.6f : (isCompleted ? 0.25f : 0.15f);
+            
+            DrawRectangleRounded({x, y, cellSize * 2, cellSize}, 0.2f, 8, Fade(boxColor, alpha));
+            Rectangle cellRect = {x, y, cellSize * 2, cellSize};
+            DrawRectangleLinesEx(cellRect, 2, boxColor);
+            
+            DrawTextEx(res.font, TextFormat("FINAL %d", i + 1), {x + 10, y + 16}, 16, 2, boxColor);
+            DrawTextEx(res.font, TextFormat("%d", currentLevelIdx + 1), {x + 4, y + 38}, 10, 1, WHITE);
+            
+            currentLevelIdx++;
+        }
+    }
+    
+    // Instructions
+    DrawTextEx(res.font, "[ARROWS] NAVIGATE   [ENTER] PLAY", {18, 655}, 18, 2, GRAY);
+    DrawTextEx(res.font, "[ESC] BACK", {18, 695}, 18, 2, GRAY);
+}
+
+void GameEngine::DrawMinigameMenuGUI() {
+    // Draw background
+    DrawTexturePro(res.bgGeneral, 
+        {0, 0, (float)res.bgGeneral.width, (float)res.bgGeneral.height},
+        {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+        {0, 0}, 0, WHITE);
+    
+    DrawTextCentered("MINIGAME SELECTION", 60, 50, 2, COLOR_ACCENT);
+    
+    // Handle Time Attack Configuration
+    if (timeAttackConfigStep == 1) {
+        // Step 1: Duration Selection
+        DrawTextCentered("TIME ATTACK - SELECT DURATION", 140, 35, 2, COLOR_GOLD);
+        
+        const char* durations[] = {"30 SECONDS", "60 SECONDS", "90 SECONDS"};
+        float buttonY = 250;
+        for (int i = 0; i < 3; i++) {
+            Color btnColor = (timeAttackDurationSelection == i) ? COLOR_GOLD : WHITE;
+            DrawRectangleRounded({340, buttonY, 600, 60}, 0.2f, 10, Fade(btnColor, 0.3f));
+            Rectangle btnRect = {340.0f, buttonY, 600.0f, 60.0f};
+            DrawRectangleLinesEx(btnRect, 2, btnColor);
+            DrawTextCentered(durations[i], buttonY + 15, 32, 2, btnColor);
+            buttonY += 80;
+        }
+        
+        // Show personal best
+        DrawTextCentered(TextFormat("Personal Best: %.1f letters/min", player.activeUser.timeAttackBest), 
+                         550, 20, 2, COLOR_ACCENT);
+        
+        // Instructions
+        DrawTextCentered("[LEFT/RIGHT] SELECT   [ENTER] NEXT   [ESC] BACK", 650, 18, 2, GRAY);
+    } else if (timeAttackConfigStep == 2) {
+        // Step 2: Mode Selection
+        DrawTextCentered("TIME ATTACK - SELECT MODE", 140, 35, 2, COLOR_GOLD);
+        
+        const char* modes[] = {"LETTER → MORSE", "MORSE → LETTER"};
+        const char* descriptions[] = {
+            "Type morse code for shown letters",
+            "Type letters for shown morse code"
+        };
+        
+        float buttonY = 250;
+        for (int i = 0; i < 2; i++) {
+            Color btnColor = (timeAttackModeSelection == i) ? COLOR_GOLD : WHITE;
+            DrawRectangleRounded({240, buttonY, 800, 80}, 0.2f, 10, Fade(btnColor, 0.3f));
+            Rectangle btnRect = {240.0f, buttonY, 800.0f, 80.0f};
+            DrawRectangleLinesEx(btnRect, 2, btnColor);
+            DrawTextCentered(modes[i], buttonY + 18, 32, 2, btnColor);
+            DrawTextCentered(descriptions[i], buttonY + 52, 18, 2, Fade(btnColor, 0.7f));
+            buttonY += 100;
+        }
+        
+        // Instructions
+        DrawTextCentered("[LEFT/RIGHT] SELECT   [ENTER] START   [BACKSPACE] BACK", 650, 18, 2, GRAY);
+    }
+    // Handle Defuse Protocol Configuration
+    else if (defuseConfigStep == 1) {
+        // Mode Selection
+        DrawTextCentered("DEFUSE PROTOCOL - SELECT MODE", 140, 35, 2, COLOR_GOLD);
+        
+        const char* modes[] = {"MORSE → LETTER", "LETTER → MORSE"};
+        const char* descriptions[] = {
+            "Decode morse signals to disarm",
+            "Encode letters to disarm"
+        };
+        
+        float buttonY = 250;
+        for (int i = 0; i < 2; i++) {
+            Color btnColor = (defuseModeSelection == i) ? COLOR_GOLD : WHITE;
+            DrawRectangleRounded({240, buttonY, 800, 80}, 0.2f, 10, Fade(btnColor, 0.3f));
+            Rectangle btnRect = {240.0f, buttonY, 800.0f, 80.0f};
+            DrawRectangleLinesEx(btnRect, 2, btnColor);
+            DrawTextCentered(modes[i], buttonY + 18, 32, 2, btnColor);
+            DrawTextCentered(descriptions[i], buttonY + 52, 18, 2, Fade(btnColor, 0.7f));
+            buttonY += 100;
+        }
+        
+        // Instructions
+        DrawTextCentered("[LEFT/RIGHT] SELECT   [ENTER] START   [ESC] BACK", 650, 18, 2, GRAY);
+    }
+    // Handle Parachute Drop Configuration
+    else if (parachuteConfigStep == 1) {
+        // Mode Selection
+        DrawTextCentered("PARACHUTE DROP - SELECT MODE", 140, 35, 2, COLOR_GOLD);
+        
+        const char* modes[] = {"LETTER → MORSE", "MORSE → LETTER"};
+        const char* descriptions[] = {
+            "Type morse code for falling letters",
+            "Type letters for falling morse code (SLOWER)"
+        };
+        
+        float buttonY = 250;
+        for (int i = 0; i < 2; i++) {
+            Color btnColor = (parachuteModeSelection == i) ? COLOR_GOLD : WHITE;
+            DrawRectangleRounded({240, buttonY, 800, 80}, 0.2f, 10, Fade(btnColor, 0.3f));
+            Rectangle btnRect = {240.0f, buttonY, 800.0f, 80.0f};
+            DrawRectangleLinesEx(btnRect, 2, btnColor);
+            DrawTextCentered(modes[i], buttonY + 18, 32, 2, btnColor);
+            DrawTextCentered(descriptions[i], buttonY + 52, 18, 2, Fade(btnColor, 0.7f));
+            buttonY += 100;
+        }
+        
+        // Instructions
+        DrawTextCentered("[LEFT/RIGHT] SELECT   [ENTER] START   [ESC] BACK", 650, 18, 2, GRAY);
+    }
+    // Main Minigame Selection Menu
+    else {
+        DrawTextCentered("SELECT A MINIGAME", 140, 35, 2, COLOR_GOLD);
+        
+        const char* minigames[] = {"TIME ATTACK", "DEFUSE PROTOCOL", "PARACHUTE DROP"};
+        const char* descriptions[] = {
+            "Translate as many letters as possible within time limit",
+            "Defuse the bomb by translating morse signals",
+            "Catch falling words and letters - miss 10 and you're out!"
+        };
+        
+        float buttonY = 220;
+        for (int i = 0; i < 3; i++) {
+            Color btnColor = (minigameMenuSelection == i) ? COLOR_GOLD : WHITE;
+            DrawRectangleRounded({240, buttonY, 800, 80}, 0.2f, 10, Fade(btnColor, 0.3f));
+            Rectangle btnRect = {240.0f, buttonY, 800.0f, 80.0f};
+            DrawRectangleLinesEx(btnRect, 2, btnColor);
+            DrawTextCentered(minigames[i], buttonY + 18, 32, 2, btnColor);
+            DrawTextCentered(descriptions[i], buttonY + 52, 18, 2, Fade(btnColor, 0.7f));
+            buttonY += 100;
+        }
+        
+        // Instructions
+        DrawTextCentered("[UP/DOWN] SELECT   [ENTER] CONTINUE   [ESC] BACK", 650, 18, 2, GRAY);
+    }
+}
+
+void GameEngine::DrawMinigameGateGUI() {
+    // Draw background
+    DrawTexturePro(res.bgGeneral, 
+        {0, 0, (float)res.bgGeneral.width, (float)res.bgGeneral.height},
+        {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+        {0, 0}, 0, WHITE);
+    
+    DrawTextCentered("UNLOCK REVERSE MODE", 60, 50, 2, COLOR_ACCENT);
+    
+    bool defusePassed = player.activeUser.defusePassed;
+    bool timeAttackPassed = player.activeUser.timeAttackBest >= 30.0f;
+    bool canProceed = defusePassed && timeAttackPassed;
+    
+    // Requirements section
+    DrawTextCentered("REQUIREMENTS TO PROCEED:", 140, 28, 2, COLOR_GOLD);
+    
+    float reqY = 190;
+    Color defuseColor = defusePassed ? COLOR_SUCCESS : RED;
+    Color timeColor = timeAttackPassed ? COLOR_SUCCESS : RED;
+    
+    const char* defuseStatus = defusePassed ? "[V] Pass Defuse Protocol" : "[  ] Pass Defuse Protocol";
+    const char* timeStatus = timeAttackPassed ? 
+        TextFormat("[V] Achieve 30 LPM in Time Attack (Best: %.1f)", player.activeUser.timeAttackBest) :
+        TextFormat("[  ] Achieve 30 LPM in Time Attack (Best: %.1f)", player.activeUser.timeAttackBest);
+    
+    DrawTextCentered(defuseStatus, reqY, 24, 2, defuseColor);
+    DrawTextCentered(timeStatus, reqY + 40, 24, 2, timeColor);
+    
+    // Minigame selection
+    DrawTextCentered("PRACTICE MINIGAMES:", 300, 28, 2, COLOR_GOLD);
+    
+    const char* minigames[] = {"TIME ATTACK", "DEFUSE PROTOCOL"};
+    const char* descriptions[] = {
+        "(Letter -> Morse, 60 seconds)",
+        "(Letter -> Morse)"
+    };
+    
+    float buttonY = 360;
+    for (int i = 0; i < 2; i++) {
+        Color btnColor = (minigameGateSelection == i) ? COLOR_GOLD : WHITE;
+        DrawRectangleRounded({240, buttonY, 800, 70}, 0.2f, 10, Fade(btnColor, 0.3f));
+        Rectangle btnRect = {240.0f, buttonY, 800.0f, 70.0f};
+        DrawRectangleLinesEx(btnRect, 2, btnColor);
+        DrawTextCentered(minigames[i], buttonY + 15, 28, 2, btnColor);
+        DrawTextCentered(descriptions[i], buttonY + 45, 18, 2, Fade(btnColor, 0.7f));
+        buttonY += 90;
+    }
+    
+    // Proceed button (if unlocked)
+    if (canProceed) {
+        buttonY += 20;
+        Color proceedColor = (minigameGateSelection == 2) ? COLOR_SUCCESS : WHITE;
+        DrawRectangleRounded({240, buttonY, 800, 70}, 0.2f, 10, Fade(proceedColor, 0.3f));
+        Rectangle btnRect = {240.0f, buttonY, 800.0f, 70.0f};
+        DrawRectangleLinesEx(btnRect, 2, proceedColor);
+        DrawTextCentered("PROCEED TO REVERSE MODE", buttonY + 22, 32, 2, proceedColor);
+    }
+    
+    // Instructions
+    DrawTextCentered("[UP/DOWN] SELECT   [ENTER] CONTINUE   [ESC] BACK", 680, 18, 2, GRAY);
+}
+
+void GameEngine::DrawMinigameGateReverseGUI() {
+    // Draw background
+    DrawTexturePro(res.bgGeneral, 
+        {0, 0, (float)res.bgGeneral.width, (float)res.bgGeneral.height},
+        {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+        {0, 0}, 0, WHITE);
+    
+    DrawTextCentered("UNLOCK FINAL LEVELS", 60, 50, 2, COLOR_ACCENT);
+    
+    bool defusePassed = player.activeUser.defusePassedReverse;
+    bool timeAttackPassed = player.activeUser.timeAttackBestReverse >= 20.0f;
+    bool canProceed = defusePassed && timeAttackPassed;
+    
+    // Requirements section
+    DrawTextCentered("REQUIREMENTS TO PROCEED:", 140, 28, 2, COLOR_GOLD);
+    
+    float reqY = 190;
+    Color defuseColor = defusePassed ? COLOR_SUCCESS : RED;
+    Color timeColor = timeAttackPassed ? COLOR_SUCCESS : RED;
+    
+    const char* defuseStatus = defusePassed ? "[V] Pass Defuse Protocol (Reverse)" : "[  ] Pass Defuse Protocol (Reverse)";
+    const char* timeStatus = timeAttackPassed ? 
+        TextFormat("[V] Achieve 20 LPM in Time Attack (Best: %.1f)", player.activeUser.timeAttackBestReverse) :
+        TextFormat("[  ] Achieve 20 LPM in Time Attack (Best: %.1f)", player.activeUser.timeAttackBestReverse);
+    
+    DrawTextCentered(defuseStatus, reqY, 24, 2, defuseColor);
+    DrawTextCentered(timeStatus, reqY + 40, 24, 2, timeColor);
+    
+    // Minigame selection
+    DrawTextCentered("PRACTICE MINIGAMES:", 280, 28, 2, COLOR_GOLD);
+    
+    const char* minigames[] = {"TIME ATTACK", "DEFUSE PROTOCOL"};
+    const char* descriptions[] = {
+        "(Morse -> Letter, 60 seconds)",
+        "(Morse -> Letter)"
+    };
+    
+    float buttonY = 330;
+    for (int i = 0; i < 2; i++) {
+        Color btnColor = (minigameGateReverseSelection == i) ? COLOR_GOLD : WHITE;
+        DrawRectangleRounded({240, buttonY, 800, 60}, 0.2f, 10, Fade(btnColor, 0.3f));
+        Rectangle btnRect = {240.0f, buttonY, 800.0f, 60.0f};
+        DrawRectangleLinesEx(btnRect, 2, btnColor);
+        DrawTextCentered(minigames[i], buttonY + 12, 24, 2, btnColor);
+        DrawTextCentered(descriptions[i], buttonY + 38, 16, 2, Fade(btnColor, 0.7f));
+        buttonY += 75;
+    }
+    
+    // Final level buttons (if unlocked)
+    if (canProceed) {
+        buttonY += 10;
+        DrawTextCentered("SELECT FINAL LEVEL:", buttonY, 25, 2, COLOR_SUCCESS);
+        buttonY += 35;
+        
+        // Final Game 1 button
+        Color final1Color = (minigameGateReverseSelection == 2) ? COLOR_SUCCESS : WHITE;
+        DrawRectangleRounded({240, buttonY, 800, 60}, 0.2f, 10, Fade(final1Color, 0.3f));
+        Rectangle btn1Rect = {240.0f, buttonY, 800.0f, 60.0f};
+        DrawRectangleLinesEx(btn1Rect, 2, final1Color);
+        DrawTextCentered("FINAL LEVEL 1: BEEPS AND BAAPS", buttonY + 12, 26, 2, final1Color);
+        DrawTextCentered("(Morse listening challenge)", buttonY + 38, 16, 2, Fade(final1Color, 0.7f));
+        
+        buttonY += 75;
+        
+        // Final Game 2 button
+        Color final2Color = (minigameGateReverseSelection == 3) ? COLOR_SUCCESS : WHITE;
+        DrawRectangleRounded({240, buttonY, 800, 60}, 0.2f, 10, Fade(final2Color, 0.3f));
+        Rectangle btn2Rect = {240.0f, buttonY, 800.0f, 60.0f};
+        DrawRectangleLinesEx(btn2Rect, 2, final2Color);
+        DrawTextCentered("FINAL LEVEL 2: LIGHT CODE", buttonY + 12, 26, 2, final2Color);
+        DrawTextCentered("(Light-based morse code challenge)", buttonY + 38, 16, 2, Fade(final2Color, 0.7f));
+    }
+    
+    // Instructions
+    DrawTextCentered("[UP/DOWN] SELECT   [ENTER] CONTINUE   [ESC] BACK", 680, 18, 2, GRAY);
+}
+
+void GameEngine::DrawStudyGUI(Vector2 offset) {
+    // Draw background
+    DrawTexturePro(res.bgGeneral, 
+        {0, 0, (float)res.bgGeneral.width, (float)res.bgGeneral.height},
+        {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+        {0, 0}, 0, WHITE);
+    
+    DrawTextCentered("STUDY THE SIGNAL", 60 + offset.y, 40, 2, COLOR_GOLD);
+    
+    // Get current letter for hint
+    int currentIdx = (tempLevelIdx >= 0) ? tempLevelIdx : player.activeUser.currentLetterIdx;
+    char currentChar = levelSequence[currentIdx % levelSequence.size()];
+    
+    // Display hint for current letter
+    const char* hints[] = {
+        "top corner than middle dash (.-)",
+        "dash than 3 dots (-...)",
+        "alternating (-.-.)",
+        "dash than 2 dots (-..))",
+        "single dot (.)",
+        "2 dots, dash, than dot (..-.)",
+        "2 dashes than dot (--.)",
+        "4 dots for each corner (....)",
+        "2 dots for each corner (..)",
+        "dot than 3 dashes (.---)",
+        "dot b/w 2 dashes (-.-)",
+        "dot, dash than 2 dots (.-..)",
+        "2 dashes as side pillars (--)",
+        "dash than dot (-.) opp. to A (.-)",
+        "3 dashes to from a circle (---)",
+        "2 dashes b/w 2 dots (.--.)",
+        "2 dashes, dot than dash (--.-) a dot at the bar",
+        "dash b/w 2 dot (.-.))",
+        "3 dots in line (...)",
+        "dash on top bar (-)",
+        "2 dots than dash (..-) opp. to D (-..)",
+        "3 dots than dash (...-) opp.to B (-...)",
+        "dot than 2 dashes (.--) opp.to G (--.)",
+        "2 dots b/w 2 dashes (-..-) opp. to P (.--.) mirror % sign",
+        "dash, dot than 2 dashes (-.--) opp. to Q (--.-)",
+        "2 dashes than 2 dots (--..)"
+    };
+    DrawTextCentered(hints[currentChar - 'A'], 180 + offset.y, 36, 1.5, GREEN);
+    
+    float centerX = GetScreenWidth() / 2.0f;
+    float centerY = GetScreenHeight() / 2.0f;
+    // Use temp level if set, otherwise use actual progress
+    currentIdx = (tempLevelIdx >= 0) ? tempLevelIdx : player.activeUser.currentLetterIdx;
+    int totalLevels = levelSequence.size();
+    int prevIdx = (currentIdx - 1 + totalLevels) % totalLevels;
+    int nextIdx = (currentIdx + 1) % totalLevels;
+
+    // Previous
+    char prevChar = levelSequence[prevIdx];
+    Texture2D texPrev = res.coded[prevChar - 'A'];
+    float scalePrev = 65.0f / texPrev.height;
+    DrawTextureEx(texPrev, {centerX - 200 - (texPrev.width * scalePrev)/2 + offset.x, centerY - 32.5f + offset.y}, 0, scalePrev, Fade(WHITE, 0.3f));
+
+    // Next
+    char nextChar = levelSequence[nextIdx];
+    Texture2D texNext = res.coded[nextChar - 'A'];
+    float scaleNext = 65.0f / texNext.height;
+    DrawTextureEx(texNext, {centerX + 200 - (texNext.width * scaleNext)/2 + offset.x, centerY - 32.5f + offset.y}, 0, scaleNext, Fade(WHITE, 0.3f));
+
+    // Current (reuse currentChar from above)
+    currentChar = levelSequence[currentIdx];
+    float hover = sinf(bounceTimer * 3.0f) * 15.0f;
+    Texture2D tex = res.coded[currentChar - 'A'];
+    float scale = 75.0f / tex.height;
+    float texWidth = tex.width * scale;
+    DrawTextureEx(tex, {centerX - texWidth/2.0f + offset.x, centerY - 37.5f + hover + offset.y}, 0, scale, WHITE);
+
+    DrawTextCentered("PRESS ANY KEY WHEN READY", 600, 20, 2, COLOR_ACCENT);
+}
+
+void GameEngine::DrawTestGUI(Vector2 offset) {
+    // Draw background
+    DrawTexturePro(res.bgGeneral, 
+        {0, 0, (float)res.bgGeneral.width, (float)res.bgGeneral.height},
+        {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+        {0, 0}, 0, WHITE);
+    
+    DrawTextCentered("TRANSMIT NOW", 80 + offset.y, 30, 2, WHITE);
+    
+    float centerX = GetScreenWidth() / 2.0f;
+    float centerY = GetScreenHeight() / 2.0f;
+    // Use temp level if set, otherwise use actual progress
+    int currentIdx = (tempLevelIdx >= 0) ? tempLevelIdx : player.activeUser.currentLetterIdx;
+    currentIdx = currentIdx % levelSequence.size();
+    int totalLevels = levelSequence.size();
+    int prevIdx = (currentIdx - 1 + totalLevels) % totalLevels;
+    int nextIdx = (currentIdx + 1) % totalLevels;
+
+    // Previous
+    char prevChar = levelSequence[prevIdx];
+    Texture2D texPrev = res.nonCoded[prevChar - 'A'];
+    float scalePrev = 65.0f / texPrev.height;
+    DrawTextureEx(texPrev, {centerX - 200 - (texPrev.width * scalePrev)/2 + offset.x, centerY - 32.5f + offset.y}, 0, scalePrev, Fade(WHITE, 0.3f));
+
+    // Next
+    char nextChar = levelSequence[nextIdx];
+    Texture2D texNext = res.nonCoded[nextChar - 'A'];
+    float scaleNext = 65.0f / texNext.height;
+    DrawTextureEx(texNext, {centerX + 200 - (texNext.width * scaleNext)/2 + offset.x, centerY - 32.5f + offset.y}, 0, scaleNext, Fade(WHITE, 0.3f));
+
+    // Current
+    char currentChar = levelSequence[currentIdx];
+    Texture2D tex = (wrongAttempts >= 3) ? res.coded[currentChar - 'A'] : res.nonCoded[currentChar - 'A'];
+    float scale = 75.0f / tex.height;
+    float texWidth = tex.width * scale;
+    DrawTextureEx(tex, {centerX - texWidth/2.0f + offset.x, centerY - 37.5f + offset.y}, 0, scale, WHITE);
+    
+    // Morse feedback dots/dashes
+    float inputWidth = MeasureTextEx(res.font, currentInput.c_str(), 50, 2).x;
+    DrawTextEx(res.font, currentInput.c_str(), {640 - inputWidth/2, 480}, 50, 2, COLOR_ACCENT);
+    
+    // Progress Bar
+    DrawRectangle(440, 560, 400, 12, GRAY);
+    char target = currentChar;
+    float progress = (float)currentInput.length() / morseTable[target].length();
+    DrawRectangle(440, 560, 400 * progress, 12, COLOR_SUCCESS);
+
+    DrawTextCentered( "Type Morse: [CTRL]=dot [SPACE]=dash", 600, 30, 2, Fade(WHITE, 0.7f));
+}
+
+void GameEngine::DrawLevelUpGUI() {
+    DrawTexturePro(res.bgGeneral, 
+    {0, 0, (float)res.bgGeneral.width, (float)res.bgGeneral.height},
+    {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+    {0, 0}, 0, WHITE);
+    
+
+    if (lastMiniGameFailed) {
+        DrawTextCentered("STAGE FAILED!", 300, 45, 2, RED);
+        DrawTextCentered("PRESS SPACE TO RETRY DEFUSE PROTOCOL", 380, 20, 2, WHITE);
+    } else if (isStageCleared) {
+        DrawTextCentered("STAGE CLEARED!", 300, 45, 2, COLOR_GOLD);
+        DrawTextCentered("PRESS SPACE TO CONTINUE", 380, 20, 2, WHITE);
+    } else {
+        DrawTextCentered("SIGNAL RECEIVED!", 300, 45, 2, COLOR_SUCCESS);
+        DrawTextCentered("PRESS SPACE FOR NEXT LEVEL", 380, 20, 2, WHITE);
+    }
+    DrawTextCentered(TextFormat("TOTAL XP: %d", player.activeUser.xp), 450, 20, 2, COLOR_GOLD);
+}
+
+void GameEngine::DrawStageTestGUI(Vector2 offset) {
+// Draw background
+    DrawTexturePro(res.bgParachute, 
+        {0, 0, (float)res.bgParachute.width, (float)res.bgParachute.height},
+        {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+        {0, 0}, 0, WHITE);
+    
+    DrawTextCentered("PARACHUTE DROP", 20 + offset.y, 30, 2, DARKBLUE);
+    DrawTextEx(res.font, TextFormat("REMAINING: %d", stageTestQueue.size() - stageTestCurrentIdx), {20, 20}, 30, 2, WHITE);
+
+    if (activeFallingWord.active) {
+        Vector2 pos = activeFallingWord.position;
+        
+        // Draw Word Basket/Container
+        // Calculate approx width based on word length
+        float wordWidthBytes = MeasureTextEx(res.font, activeFallingWord.word.c_str(), 30, 2).x;
+        float containerWidth = std::max(100.0f, wordWidthBytes + 40);
+
+        // Draw Parachute/Sky centered above the container
+        float skyScale = 0.4f; 
+        float skyWidth = res.sky.width * skyScale;
+        float skyHeight = res.sky.height * skyScale;
+        DrawTextureEx(res.sky, {pos.x + (containerWidth - skyWidth)/2.0f, pos.y - skyHeight}, 0, skyScale, WHITE);
+
+        DrawRectangleRounded({pos.x, pos.y, containerWidth, 65}, 0.3f, 6, Fade(BLACK, 0.6f));
+        Rectangle containerRect = {pos.x, pos.y, containerWidth, 65.0f};
+        DrawRectangleLinesEx(containerRect, 2, COLOR_GOLD);
+
+        // Draw Letters centered inside container
+        float totalLettersWidth = 0.0f;
+        for (int i = 0; i < activeFallingWord.word.length(); i++) {
+            char tmp[2] = { activeFallingWord.word[i], '\0' };
+            totalLettersWidth += MeasureTextEx(res.font, tmp, 30, 2).x;
+            if (i < activeFallingWord.word.length() - 1) totalLettersWidth += 5; // spacing
+        }
+        float charXf = pos.x + (containerWidth - totalLettersWidth) / 2.0f;
+        for (int i = 0; i < activeFallingWord.word.length(); i++) {
+            Color c;
+            if (i < activeFallingWord.currentMatchIdx) c = GREEN; // Completed
+            else if (i == activeFallingWord.currentMatchIdx) c = COLOR_ACCENT; // Current Target
+            
+            char str[2] = { activeFallingWord.word[i], '\0' };
+            float w = MeasureTextEx(res.font, str, 30, 2).x;
+            DrawTextEx(res.font, str, {charXf, pos.y + 15}, 30, 2, c);
+            charXf += w + 5;
+        }
+
+        // Draw Input Feedback (Morse) centered under container
+        float inputW = MeasureTextEx(res.font, currentInput.c_str(), 30, 2).x;
+        DrawTextEx(res.font, currentInput.c_str(), {pos.x + (containerWidth - inputW)/2.0f, pos.y + 70}, 30, 2,COLOR_ACCENT);
+    }
+}
+
+
+
+void GameEngine::DrawMiniGame() {
+    switch (activeMiniGame.type) {
+        case MINIGAME_DEFUSE: {
+            // Draw background
+            DrawTexturePro(res.bgDefuse, 
+                {0, 0, (float)res.bgDefuse.width, (float)res.bgDefuse.height},
+                {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+                {0, 0}, 0, WHITE);
+            
+            DrawTextCentered("DEFUSE PROTOCOL", 50, 40, 2, RED);
+            DrawTextCentered("Encode the sequence before the bomb detonates!", 110, 20, 2, WHITE);
+
+            float timeLeft = activeMiniGame.bombCountdown;
+            Color tcol = (timeLeft <= 10.0f) ? RED : COLOR_GOLD;
+            
+            float startX = 240.0f;
+            float y = 260.0f;
+            // Show round progress
+            DrawTextCentered(TextFormat("ROUND: %d / %d", activeMiniGame.defuseRoundIndex + 1, activeMiniGame.defuseRounds), 200, 24, 2,YELLOW);
+            if (activeMiniGame.defuseUsesLetterInput) {
+                // Progress row (small indicators)
+                for (int i = 0; i < activeMiniGame.defuseLetters.size(); i++) {
+                    char ch = activeMiniGame.defuseLetters[i];
+                    // Only show letters that have been successfully decoded
+                    if (i < activeMiniGame.defuseIndex) {
+                        // Already decoded - show in green
+                        DrawTextEx(res.font, TextFormat("%c", ch), {startX + i * 48.0f, y - 40.0f}, 24, 2, Fade(YELLOW, 0.9f));
+                    } else if (i == activeMiniGame.defuseIndex) {
+                        // Current letter - don't show, use placeholder
+                        DrawTextEx(res.font, "_", {startX + i * 48.0f, y - 40.0f}, 24, 2, Fade(YELLOW, 0.6f));
+                    } else {
+                        // Future letters - show hint after 2 wrong attempts
+                        if (activeMiniGame.defuseWrongAttempts >= 2) {
+                            DrawTextEx(res.font, TextFormat("%c", ch), {startX + i * 48.0f, y - 40.0f}, 24, 2, Fade(WHITE, 0.6f));
+                        } else {
+                            // Placeholder to keep layout: subtle dash
+                            DrawTextEx(res.font, "_", {startX + i * 48.0f, y - 40.0f}, 24, 2, Fade(WHITE, 0.15f));
+                        }
+                    }
+                }
+
+                // Show full MORSE sentence (all letters) so user can decode letters from the entire sequence
+                if (!activeMiniGame.defuseLetters.empty()) {
+                    std::string fullMorse;
+                    for (size_t i = 0; i < activeMiniGame.defuseLetters.size(); ++i) {
+                        char ch = activeMiniGame.defuseLetters[i];
+                        fullMorse += morseTable[ch];
+                        if (i + 1 < activeMiniGame.defuseLetters.size()) fullMorse += "   "; // spacing between letters
+                    }
+                    float centerX = GetScreenWidth() / 2.0f;
+                    // Use a slightly smaller font to fit multiple letters on screen
+                    int morseFontSize = 40;
+                    float morseW = MeasureTextEx(res.font, fullMorse.c_str(), morseFontSize, 2).x;
+                    DrawTextEx(res.font, fullMorse.c_str(), { centerX - morseW/2.0f, 300.0f }, morseFontSize, 2, YELLOW);
+
+                    // Optionally draw a subtle marker under the current letter's morse segment
+                    // (approximate by highlighting the portion up to current index)
+                    // Highlight current letter by overlaying its morse in accent color slightly lower
+                    if (activeMiniGame.defuseIndex < activeMiniGame.defuseLetters.size()) {
+                        // Build morse up to current index with same spacing to measure offset
+                        std::string leftPart;
+                        for (size_t i = 0; i < activeMiniGame.defuseIndex; ++i) {
+                            leftPart += morseTable[ activeMiniGame.defuseLetters[i] ];
+                            if (i + 1 < activeMiniGame.defuseLetters.size()) leftPart += "   ";
+                        }
+                        std::string currPart = morseTable[ activeMiniGame.defuseLetters[activeMiniGame.defuseIndex] ];
+                        float leftW = MeasureTextEx(res.font, leftPart.c_str(), morseFontSize, 2).x;
+                        float currW = MeasureTextEx(res.font, currPart.c_str(), morseFontSize, 2).x;
+                        // Draw current part in brighter accent slightly below the main line
+                        DrawTextEx(res.font, currPart.c_str(), { centerX - morseW/2.0f + leftW, 340.0f }, morseFontSize, 2, COLOR_GOLD);
+                    }
+                }
+
+                DrawTextCentered("Type LETTER (A-Z)", 420, 20, 2, GRAY);
+            } else {
+                for (int i = 0; i < activeMiniGame.defuseLetters.size(); i++) {
+                    char ch = activeMiniGame.defuseLetters[i];
+                    Color col = WHITE;
+                    if (i < activeMiniGame.defuseIndex) col = GREEN;
+                    else if (i == activeMiniGame.defuseIndex) col = YELLOW;
+                    char buf[2] = { ch, '\0' };
+                    DrawTextEx(res.font, buf, {startX + i * 80.0f, y}, 60, 2, col);
+                }
+
+                if (!currentInput.empty()) {
+                    float inputW = MeasureTextEx(res.font, currentInput.c_str(), 50, 2).x;
+                    DrawTextEx(res.font, currentInput.c_str(), {640 - inputW/2, 420}, 50, 2, YELLOW);
+                } else {
+                    DrawTextCentered("Type Morse: [CTRL]=dot [SPACE]=dash", 420, 20, 2, GRAY);
+                }
+            }
+
+            float pct = std::max(0.0f, std::min(1.0f, activeMiniGame.bombCountdown / 15.0f));
+            int bx = 640; int by = 520; int radius = 60;
+            DrawCircle(bx, by, radius, Fade(RED, 0.2f));
+            DrawCircleLines(bx, by, radius, RED);
+            DrawCircle(bx, by, radius * pct, Fade(RED, 0.6f));
+            DrawTextEx(res.font, "BOMB", {float(bx - 28), float(by - 12)}, 20, 2, WHITE);
+
+            // Draw countdown (time only) below the bomb; the "BOMB" label stays static
+            {
+                std::string timeTxt = TextFormat("%.1f s", timeLeft);
+                float timeW = MeasureTextEx(res.font, timeTxt.c_str(), 40, 2).x;
+                DrawTextEx(res.font, timeTxt.c_str(), { float(bx) - timeW / 2.0f, float(by + radius + 12) }, 40, 2, tcol);
+            }
+            break;
+        }
+        case MINIGAME_TIME_ATTACK: {
+            // Draw background
+            DrawTexturePro(res.bgTimeAttack, 
+                {0, 0, (float)res.bgTimeAttack.width, (float)res.bgTimeAttack.height},
+                {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+                {0, 0}, 0, WHITE);
+            
+            DrawTextCentered("TIME ATTACK", 50, 50, 2, COLOR_GOLD);
+            
+            // Show mode
+            const char* modeText = activeMiniGame.timeAttackReverseMode ? "MORSE → LETTER" : "LETTER → MORSE";
+            DrawTextCentered(modeText, 110, 25, 2, COLOR_ACCENT);
+            
+            // Timer display
+            float timeLeft = activeMiniGame.timeAttackTimer;
+            Color timerColor = (timeLeft <= 10.0f) ? RED : COLOR_ACCENT;
+            DrawTextCentered(TextFormat("TIME: %.1f", timeLeft), 160, 40, 2, timerColor);
+            
+            // Score display (letters translated)
+            DrawTextCentered(TextFormat("SCORE: %d", activeMiniGame.timeAttackScore), 220, 40, 2, COLOR_SUCCESS);
+            
+            // Calculate and show current letters per minute
+            float timeElapsed = activeMiniGame.timeAttackDuration - timeLeft;
+            float currentLPM = (timeElapsed > 0) ? (activeMiniGame.timeAttackScore / timeElapsed) * 60.0f : 0.0f;
+            DrawTextCentered(TextFormat("RATE: %.1f letters/min", currentLPM), 280, 30, 2, COLOR_GOLD);
+            
+            // Personal best
+            DrawTextCentered(TextFormat("BEST: %.1f letters/min", player.activeUser.timeAttackBest), 330, 25, 2, GRAY);
+            
+            // Display based on mode
+            char target = activeMiniGame.timeAttackTarget;
+            
+            if (activeMiniGame.timeAttackReverseMode) {
+                // Morse → Letter mode: Show morse code
+                DrawTextCentered("DECODE:", 400, 25, 2, GRAY);
+                std::string morse = morseTable[target];
+                DrawTextCentered(morse.c_str(), 450, 60, 2, COLOR_ACCENT);
+                DrawTextCentered("Type the letter", 530, 20, 2, GRAY);
+            } else {
+                // Letter → Morse mode: Show letter
+                DrawTextCentered("ENCODE:", 400, 25, 2, GRAY);
+                DrawTextCentered(TextFormat("%c", target), 450, 80, 2, COLOR_ACCENT);
+                
+                // User morse input
+                if (!activeMiniGame.timeAttackInput.empty()) {
+                    float inputW = MeasureTextEx(res.font, activeMiniGame.timeAttackInput.c_str(), 50, 2).x;
+                    DrawTextEx(res.font, activeMiniGame.timeAttackInput.c_str(), {640 - inputW/2, 550}, 50, 2, COLOR_ACCENT);
+                } else {
+                    DrawTextCentered("[CTRL]=dot [SPACE]=dash", 550, 20, 2, GRAY);
+                }
+            }
+            break;
+        }
+        case MINIGAME_PARACHUTE: {
+            // Draw background
+            DrawTexturePro(res.bgParachute, 
+                {0, 0, (float)res.bgParachute.width, (float)res.bgParachute.height},
+                {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+                {0, 0}, 0, WHITE);
+            
+            // Match the stage test GUI style
+            const char* modeText = activeMiniGame.parachuteReverseMode ? "MORSE → LETTER" : "LETTER → MORSE";
+            DrawTextCentered(TextFormat("PARACHUTE DROP - %s", modeText), 20, 30, 2, DARKBLUE);
+            
+            // Stats in top left corner (matching stage test style)
+            DrawTextEx(res.font, TextFormat("CAUGHT: %d", activeMiniGame.parachuteScore), {20, 60}, 25, 2, COLOR_SUCCESS);
+            DrawTextEx(res.font, TextFormat("MISSED: %d/10", activeMiniGame.parachuteMissed), {20, 90}, 25, 2, 
+                      activeMiniGame.parachuteMissed >= 7 ? RED : WHITE);
+            
+            // Draw falling word if active (matching stage test container style)
+            if (activeMiniGame.parachuteActive) {
+                Vector2 pos = activeMiniGame.parachutePosition;
+                
+                float containerWidth = 100.0f;
+                
+                // Draw Parachute/Sky centered above the container
+                float skyScale = 0.4f; 
+                float skyWidth = res.sky.width * skyScale;
+                float skyHeight = res.sky.height * skyScale;
+                
+                if (activeMiniGame.parachuteReverseMode) {
+                    // Morse→Letter mode: Show morse code as text (dots and dashes)
+                    // Build morse string for display
+                    std::string morseDisplay = "";
+                    for (size_t i = 0; i < activeMiniGame.parachuteWord.length(); i++) {
+                        char letter = activeMiniGame.parachuteWord[i];
+                        morseDisplay += morseTable[letter];
+                        if (i < activeMiniGame.parachuteWord.length() - 1) {
+                            morseDisplay += "  "; // spacing between letters
+                        }
+                    }
+                    
+                    // Calculate width for morse text display
+                    float morseWidth = MeasureTextEx(res.font, morseDisplay.c_str(), 30, 2).x;
+                    containerWidth = std::max(150.0f, morseWidth + 40);
+                    
+                    DrawTextureEx(res.sky, {pos.x + (containerWidth - skyWidth)/2.0f, pos.y - skyHeight}, 0, skyScale, WHITE);
+                    
+                    // Draw container
+                    DrawRectangleRounded({pos.x, pos.y, containerWidth, 65}, 0.3f, 6, Fade(BLACK, 0.6f));
+                    Rectangle containerRect = {pos.x, pos.y, containerWidth, 65.0f};
+                    DrawRectangleLinesEx(containerRect, 2, COLOR_GOLD);
+                    
+                    // Draw morse code text with color coding for current position
+                    float morseXf = pos.x + (containerWidth - morseWidth) / 2.0f;
+                    int charIndex = 0;
+                    for (size_t i = 0; i < activeMiniGame.parachuteWord.length(); i++) {
+                        Color c = COLOR_ACCENT;
+                        if (i < activeMiniGame.parachuteMatchIdx) c = COLOR_ACCENT; // Completed
+                        else if (i == activeMiniGame.parachuteMatchIdx) c = GREEN; // Current Target
+                        
+                        char letter = activeMiniGame.parachuteWord[i];
+                        std::string morse = morseTable[letter];
+                        
+                        float w = MeasureTextEx(res.font, morse.c_str(), 30, 2).x;
+                        DrawTextEx(res.font, morse.c_str(), {morseXf, pos.y + 15}, 30, 2, c);
+                        morseXf += w;
+                        
+                        if (i < activeMiniGame.parachuteWord.length() - 1) {
+                            morseXf += MeasureTextEx(res.font, "  ", 30, 2).x; // spacing
+                        }
+                    }
+                } else {
+                    // Letter→Morse mode: Show letters in the falling container
+                    float wordWidthBytes = MeasureTextEx(res.font, activeMiniGame.parachuteWord.c_str(), 30, 2).x;
+                    containerWidth = std::max(100.0f, wordWidthBytes + 40);
+                    
+                    DrawTextureEx(res.sky, {pos.x + (containerWidth - skyWidth)/2.0f, pos.y - skyHeight}, 0, skyScale, WHITE);
+                    
+                    // Draw container
+                    DrawRectangleRounded({pos.x, pos.y, containerWidth, 65}, 0.3f, 6, Fade(BLACK, 0.6f));
+                    Rectangle containerRect = {pos.x, pos.y, containerWidth, 65.0f};
+                    DrawRectangleLinesEx(containerRect, 2, COLOR_GOLD);
+                    
+                    // Draw letters centered inside container
+                    float totalLettersWidth = 0.0f;
+                    for (size_t i = 0; i < activeMiniGame.parachuteWord.length(); i++) {
+                        char tmp[2] = { activeMiniGame.parachuteWord[i], '\0' };
+                        totalLettersWidth += MeasureTextEx(res.font, tmp, 30, 2).x;
+                        if (i < activeMiniGame.parachuteWord.length() - 1) totalLettersWidth += 5; // spacing
+                    }
+                    float charXf = pos.x + (containerWidth - totalLettersWidth) / 2.0f;
+                    for (size_t i = 0; i < activeMiniGame.parachuteWord.length(); i++) {
+                        Color c = GREEN;
+                        if (i < activeMiniGame.parachuteMatchIdx) c = GREEN; // Completed
+                        else if (i == activeMiniGame.parachuteMatchIdx) c = COLOR_ACCENT; // Current Target
+                        
+                        char str[2] = { activeMiniGame.parachuteWord[i], '\0' };
+                        float w = MeasureTextEx(res.font, str, 30, 2).x;
+                        DrawTextEx(res.font, str, {charXf, pos.y + 15}, 30, 2, c);
+                        charXf += w + 5;
+                    }
+                    
+                    // Draw input feedback (morse) centered under container
+                    if (!currentInput.empty()) {
+                        float inputW = MeasureTextEx(res.font, currentInput.c_str(), 30, 2).x;
+                        DrawTextEx(res.font, currentInput.c_str(), {pos.x + (containerWidth - inputW)/2.0f, pos.y + 70}, 30, 2, COLOR_GOLD);
+                    }
+                }
+            }
+            
+            // Warning when close to game over
+            if (activeMiniGame.parachuteMissed >= 7) {
+                DrawTextCentered("WARNING: APPROACHING FAILURE LIMIT!", 680, 25, 2, RED);
+            }
+            
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+// --- REVERSE LEVEL LOGIC ---
+
+void GameEngine::DrawReverseStudyGUI(Vector2 offset) {
+    // Draw background
+    DrawTexturePro(res.bgGeneral, 
+        {0, 0, (float)res.bgGeneral.width, (float)res.bgGeneral.height},
+        {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+        {0, 0}, 0, WHITE);
+    
+    DrawTextCentered("REVERSE DECODE MODE", 80 + offset.y, 30, 2, COLOR_GOLD);
+    DrawTextCentered("Study the morse code", 120 + offset.y, 20, 2, GRAY);
+    
+    float centerX = GetScreenWidth() / 2.0f;
+    float centerY = GetScreenHeight() / 2.0f;
+    // Use temp level if set, otherwise use actual progress
+    int currentIdx = (tempReverseLevelIdx >= 0) ? tempReverseLevelIdx : player.activeUser.reverseLevelIdx;
+    int totalLevels = levelSequence.size();
+    int prevIdx = (currentIdx - 1 + totalLevels) % totalLevels;
+    int nextIdx = (currentIdx + 1) % totalLevels;
+
+    // Previous (faded)
+    char prevChar = levelSequence[prevIdx];
+    Texture2D texPrev = res.coded[prevChar - 'A'];
+    float scalePrev = 65.0f / texPrev.height;
+    DrawTextureEx(texPrev, {centerX - 200 - (texPrev.width * scalePrev)/2 + offset.x, centerY - 32.5f + offset.y}, 0, scalePrev, Fade(WHITE, 0.3f));
+
+    // Next (faded)
+    char nextChar = levelSequence[nextIdx];
+    Texture2D texNext = res.coded[nextChar - 'A'];
+    float scaleNext = 65.0f / texNext.height;
+    DrawTextureEx(texNext, {centerX + 200 - (texNext.width * scaleNext)/2 + offset.x, centerY - 32.5f + offset.y}, 0, scaleNext, Fade(WHITE, 0.3f));
+
+    // Current - Show MORSE CODE
+    char currentChar = levelSequence[currentIdx];
+    float hover = sinf(bounceTimer * 3.0f) * 15.0f;
+    Texture2D tex = res.coded[currentChar - 'A'];
+    float scale = 75.0f / tex.height;
+    float texWidth = tex.width * scale;
+    DrawTextureEx(tex, {centerX - texWidth/2.0f + offset.x, centerY - 37.5f + hover + offset.y}, 0, scale, WHITE);
+    
+    // Show which letter this is (hint)
+    char hint[32];
+    snprintf(hint, 32, "This is: %c", currentChar);
+    DrawTextCentered(std::string(hint), 500, 25, 2, COLOR_ACCENT);
+
+    DrawTextCentered("PRESS ANY KEY WHEN READY", 600, 20, 2, COLOR_ACCENT);
+}
+
+void GameEngine::DrawReverseTestGUI(Vector2 offset) {
+    // Draw background
+    DrawTexturePro(res.bgGeneral, 
+        {0, 0, (float)res.bgGeneral.width, (float)res.bgGeneral.height},
+        {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+        {0, 0}, 0, WHITE);
+    
+    DrawTextCentered("TYPE THE LETTER", 80 + offset.y, 30, 2, WHITE);
+    
+    float centerX = GetScreenWidth() / 2.0f;
+    float centerY = GetScreenHeight() / 2.0f;
+    // Use temp level if set, otherwise use actual progress
+    int currentIdx = (tempReverseLevelIdx >= 0) ? tempReverseLevelIdx : player.activeUser.reverseLevelIdx;
+    int totalLevels = levelSequence.size();
+    int prevIdx = (currentIdx - 1 + totalLevels) % totalLevels;
+    int nextIdx = (currentIdx + 1) % totalLevels;
+
+    // Previous (faded morse text)
+    char prevChar = levelSequence[prevIdx];
+    std::string prevMorse = morseTable[prevChar];
+    float prevWidth = MeasureTextEx(res.font, prevMorse.c_str(), 50, 2).x;
+    DrawTextEx(res.font, prevMorse.c_str(), {centerX - 200 - prevWidth/2 + offset.x, centerY + offset.y}, 50, 2, Fade(COLOR_ACCENT, 0.3f));
+
+    // Next (faded morse text)
+    char nextChar = levelSequence[nextIdx];
+    std::string nextMorse = morseTable[nextChar];
+    float nextWidth = MeasureTextEx(res.font, nextMorse.c_str(), 50, 2).x;
+    DrawTextEx(res.font, nextMorse.c_str(), {centerX + 200 - nextWidth/2 + offset.x, centerY + offset.y}, 50, 2, Fade(COLOR_ACCENT, 0.3f));
+
+    // Current - Show MORSE CODE as TEXT only (no letter!)
+    char currentChar = levelSequence[currentIdx];
+    std::string currentMorse = morseTable[currentChar];
+    
+    // If too many wrong attempts, show hint
+    if (wrongAttempts >= 3) {
+        char hint[8];
+        snprintf(hint, 8, "(%c)", currentChar);
+        DrawTextEx(res.font, hint, {centerX - 20 + offset.x, centerY - 80 + offset.y}, 30, 2, Fade(COLOR_GOLD, 0.5f));
+    }
+    
+    float morseWidth = MeasureTextEx(res.font, currentMorse.c_str(), 80, 2).x;
+    DrawTextEx(res.font, currentMorse.c_str(), {centerX - morseWidth/2 + offset.x, centerY + offset.y}, 80, 2, COLOR_ACCENT);
+    
+    // Show attempts
+    if (wrongAttempts > 0) {
+        char msg[32];
+        snprintf(msg, 32, "Wrong attempts: %d/3", wrongAttempts);
+        DrawTextCentered(std::string(msg), 480, 20, 2, RED);
+    }
+    
+    DrawTextCentered("Type A-Z", 550, 25, 2, GRAY);
+}
+
+void GameEngine::DrawReverseLevelUpGUI() {
+    DrawTexturePro(res.bgGeneral, 
+    {0, 0, (float)res.bgGeneral.width, (float)res.bgGeneral.height},
+    {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+    {0, 0}, 0, WHITE);
+    if (isStageCleared) {
+        DrawTextEx(res.font, "REVERSE STAGE CLEARED!", {390, 300}, 45, 2, COLOR_GOLD);
+        DrawTextEx(res.font, "PRESS SPACE TO CONTINUE", {480, 380}, 20, 2, WHITE);
+    } else {
+        DrawTextEx(res.font, "DECODE SUCCESS!", {470, 300}, 45, 2, COLOR_SUCCESS);
+        DrawTextEx(res.font, "PRESS SPACE FOR NEXT LEVEL", {480, 380}, 20, 2, WHITE);
+    }
+    DrawTextCentered(TextFormat("TOTAL XP: %d", player.activeUser.xp), 450, 20, 2, COLOR_GOLD);
+}
+
+void GameEngine::DrawReverseStageTestGUI(Vector2 offset) {
+    // Draw background
+    DrawTexturePro(res.bgParachute, 
+        {0, 0, (float)res.bgParachute.width, (float)res.bgParachute.height},
+        {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+        {0, 0}, 0, WHITE);
+    
+    DrawTextCentered("REVERSE PARACHUTE DROP", 20 + offset.y, 30, 2, COLOR_ACCENT);
+    DrawTextCentered("Type the LETTERS!", 55 + offset.y, 20, 2, GRAY);
+     DrawTextEx(res.font, TextFormat("REMAINING: %d", stageTestQueue.size() - stageTestCurrentIdx), {20, 20}, 30, 2, WHITE);
+
+    if (activeFallingWord.active) {
+        Vector2 pos = activeFallingWord.position;
+        
+        float containerWidth = std::max(100.0f, (float)activeFallingWord.word.length() * 40.0f);
+
+        // Draw Parachute
+        float skyScale = 0.4f;
+        float skyWidth = res.sky.width * skyScale;
+        float skyHeight = res.sky.height * skyScale;
+        DrawTextureEx(res.sky, {pos.x + (containerWidth - skyWidth)/2.0f, pos.y - skyHeight}, 0, skyScale, WHITE);
+
+        DrawRectangleRounded({pos.x, pos.y, containerWidth, 65}, 0.3f, 6, Fade(BLACK, 0.6f));
+        Rectangle containerRect = {pos.x, pos.y, containerWidth, 65.0f};
+        DrawRectangleLinesEx(containerRect, 2, COLOR_GOLD);
+
+        // Draw MORSE CODE for each letter in word - CENTERED
+        // First calculate total width of all morse codes
+        float totalMorseWidth = 0.0f;
+        for (int i = 0; i < activeFallingWord.word.length(); i++) {
+            char c = activeFallingWord.word[i];
+            std::string morse = morseTable[c];
+            totalMorseWidth += MeasureTextEx(res.font, morse.c_str(), 25, 2).x;
+            if (i < activeFallingWord.word.length() - 1) totalMorseWidth += 10; // spacing
+        }
+        
+        // Start drawing from center
+        float charXf = pos.x + (containerWidth - totalMorseWidth) / 2.0f;
+        for (int i = 0; i < activeFallingWord.word.length(); i++) {
+            char c = activeFallingWord.word[i];
+            std::string morse = morseTable[c];
+            
+            Color col = WHITE;
+            if (i < activeFallingWord.currentMatchIdx) col = GREEN;
+            else if (i == activeFallingWord.currentMatchIdx) col = COLOR_ACCENT;
+            
+            float morseW = MeasureTextEx(res.font, morse.c_str(), 25, 2).x;
+            DrawTextEx(res.font, morse.c_str(), {charXf, pos.y + 20}, 25, 2, col);
+            charXf += morseW + 10;
+        }
+        
+        // Show letter typed so far
+        if (!currentInput.empty()) {
+            float inputW = MeasureTextEx(res.font, currentInput.c_str(), 30, 2).x;
+            DrawTextEx(res.font, currentInput.c_str(), {pos.x + (containerWidth - inputW)/2.0f, pos.y + 70}, 30, 2, COLOR_GOLD);
+        }
+    }
+}
+
+void GameEngine::DrawPauseMenu() {
+    // Draw semi-transparent overlay
+    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Fade(BLACK, 0.7f));
+    
+    // Title
+    DrawTextCentered("GAME PAUSED", 80, 50, 2, COLOR_ACCENT);
+    
+    // Status Panel (similar to progress screen)
+    DrawRectangleRounded({200, 150, 880, 280}, 0.2f, 10, Fade(BLACK, 0.8f));
+    Rectangle infoRect = {200.0f, 150.0f, 880.0f, 280.0f};
+    DrawRectangleLinesEx(infoRect, 2, COLOR_GOLD);
+    
+    // Display User Progress
+    float yPos = 180;
+    DrawTextCentered(TextFormat("OPERATOR: %s", player.activeUser.name), yPos, 35, 2, WHITE);
+    
+    yPos += 50;
+    DrawTextCentered(TextFormat("RANK: %s", player.activeUser.rankTitle), yPos, 30, 2, COLOR_GOLD);
+    
+    yPos += 50;
+    DrawTextCentered(TextFormat("XP EARNED: %d", player.activeUser.xp), yPos, 30, 2, COLOR_SUCCESS);
+    
+    yPos += 50;
+    int currentLevel = player.activeUser.currentLetterIdx;
+    int totalLevels = levelSequence.size();
+    if (currentLevel >= totalLevels) {
+        DrawTextCentered("CURRENT LEVEL: LEVEL II UNLOCKED", yPos, 30, 2, COLOR_ACCENT);
+    } else {
+        DrawTextCentered(TextFormat("CURRENT LEVEL: %c (%d/%d)", 
+            levelSequence[currentLevel], currentLevel + 1, totalLevels), yPos, 30, 2, COLOR_ACCENT);
+    }
+    
+    yPos += 50;
+    DrawTextCentered(TextFormat("LEVELS CLEARED: %d", currentLevel), yPos, 30, 2, WHITE);
+    
+    // Button Panel
+    float buttonY = 480;
+    
+    // Continue Button
+    Color continueColor = (pauseMenuSelection == 0) ? COLOR_GOLD : GRAY;
+    DrawRectangleRounded({350, buttonY, 580, 70}, 0.2f, 10, Fade(continueColor, 0.3f));
+    Rectangle continueRect = {350.0f, buttonY, 580.0f, 70.0f};
+    DrawRectangleLinesEx(continueRect, 2, continueColor);
+    DrawTextCentered("CONTINUE", buttonY + 20, 35, 2, continueColor);
+    
+    // Return to Menu Button
+    buttonY += 90;
+    Color menuColor = (pauseMenuSelection == 1) ? COLOR_GOLD : GRAY;
+    DrawRectangleRounded({350, buttonY, 580, 70}, 0.2f, 10, Fade(menuColor, 0.3f));
+    Rectangle menuRect = {350.0f, buttonY, 580.0f, 70.0f};
+    DrawRectangleLinesEx(menuRect, 2, menuColor);
+    DrawTextCentered("RETURN TO MENU", buttonY + 20, 35, 2, menuColor);
+    
+    // Instructions
+    DrawTextCentered("[UP/DOWN] SELECT   [ENTER] CONFIRM   [ESC] RESUME", 680, 18, 2, GRAY);
+}
+
+// === FINAL GAME 1: BEEPS AND BAAPS ===
+
+void GameEngine::DrawFinalGame1GUI() {
+    // Draw background
+    float scale = (float)GetScreenHeight() / res.finalGameBg.height;
+    DrawTextureEx(res.finalGameBg, {0, 0}, 0, scale, WHITE);
+    
+    // Title
+    DrawTextCentered("BEEPS AND BAAPS", 40, 45, 2, COLOR_GOLD);
+    
+    // Progress indicator
+    if (activeMiniGame.beepsPhase == 0) {
+        DrawTextCentered(TextFormat("LETTERS PHASE: %d/15", activeMiniGame.beepsRound), 90, 25, 2, DARKBLUE);
+    } else {
+        DrawTextCentered(TextFormat("WORDS PHASE: %d/5", activeMiniGame.beepsRound), 90, 25, 2, DARKBLUE);
+    }
+    
+    // Score
+    DrawTextCentered(TextFormat("CORRECT: %d", activeMiniGame.beepsCorrectCount), 130, 22, 2, COLOR_SUCCESS);
+    
+    // Main panel
+    DrawRectangleRounded({240, 200, 800, 300}, 0.2f, 10, Fade(BLACK, 0.85f));
+    Rectangle panelRect = {240.0f, 200.0f, 800.0f, 300.0f};
+    DrawRectangleLinesEx(panelRect, 2, COLOR_GOLD);
+    
+    // Status text
+    if (!activeMiniGame.beepsReady) {
+        // Waiting for user to be ready
+        if (activeMiniGame.beepsShowAnswer) {
+            // Show answer after 3 wrong attempts
+            DrawTextCentered("WRONG 3 TIMES! THE ANSWER WAS:", 260, 30, 2, RED);
+            
+            std::string answer;
+            if (activeMiniGame.beepsPhase == 0) {
+                answer = std::string(1, activeMiniGame.beepsTargetLetter);
+            } else {
+                answer = activeMiniGame.beepsTargetWord;
+            }
+            
+            DrawTextCentered(answer, 320, 45, 3, COLOR_GOLD);
+            DrawTextCentered("PENALTY: MOVED BACK 3 LEVELS", 390, 25, 2, ORANGE);
+            DrawTextCentered("PRESS [ENTER] TO CONTINUE", 440, 28, 2, DARKBLUE);
+        } else {
+            // Normal ready prompt
+            DrawTextCentered("ARE YOU READY?", 280, 35, 2, DARKBLUE);
+            DrawTextCentered("PRESS [ENTER] TO START", 350, 30, 2, COLOR_GOLD);
+        }
+    } else if (activeMiniGame.beepsIsPlaying) {
+        // Playing morse code - no hints shown
+        DrawTextCentered("LISTEN CAREFULLY...", 300, 35, 2, DARKBLUE);
+        DrawTextCentered("(NO HINTS SHOWN)", 360, 25, 2, GRAY);
+    } else {
+        // Ready to answer
+        if (activeMiniGame.beepsPhase == 0) {
+            DrawTextCentered("WHAT LETTER DID YOU HEAR?", 260, 30, 2, DARKBLUE);
+        } else {
+            DrawTextCentered("WHAT WORD DID YOU HEAR?", 260, 30, 2, DARKBLUE);
+        }
+        
+        // Show wrong attempts
+        if (activeMiniGame.beepsWrongAttempts > 0) {
+            std::string attemptsStr = TextFormat("WRONG ATTEMPTS: %d/3", activeMiniGame.beepsWrongAttempts);
+            DrawTextCentered(attemptsStr, 310, 22, 2, RED);
+        }
+        
+        // Input box
+        DrawRectangleRounded({390, 340, 500, 80}, 0.2f, 10, Fade(WHITE, 0.1f));
+        Rectangle inputRect = {390.0f, 340.0f, 500.0f, 80.0f};
+        DrawRectangleLinesEx(inputRect, 2, COLOR_GOLD);
+        
+        std::string displayText = activeMiniGame.beepsUserInput;
+        if (displayText.empty()) displayText = "___";
+        DrawTextCentered(displayText, 365, 35, 2, WHITE);
+    }
+    
+    // Instructions
+    if (activeMiniGame.beepsReady && !activeMiniGame.beepsIsPlaying) {
+        DrawTextCentered("[Shift + R] REPLAY MORSE   [ENTER] SUBMIT   [ESC] EXIT", 550, 20, 2, GRAY);
+    } else {
+        DrawTextCentered("[ESC] EXIT", 550, 20, 2, GRAY);
+    }
+    
+    // Phase description
+    if (activeMiniGame.beepsPhase == 0) {
+        DrawTextCentered("Decode 15 letters from morse beeps", 620, 18, 2, GRAY);
+    } else {
+        DrawTextCentered("Decode famous words and distress signals", 620, 18, 2, GRAY);
+    }
+}
+
+void GameEngine::DrawFinalGame2GUI() {
+    // Draw background - switch between light on/off based on state
+    float scale = (float)GetScreenHeight() / res.finalGame2Bg.height;
+    if (activeMiniGame.lightCodeOn && activeMiniGame.lightCodePlaying) {
+        DrawTextureEx(res.finalGame2BgOn, {0, 0}, 0, scale, WHITE);
+    } else {
+        DrawTextureEx(res.finalGame2Bg, {0, 0}, 0, scale, WHITE);
+    }
+    
+    // Overlay UI panels with transparency
+    // Title panel
+    DrawRectangleRounded({240, 10, 800, 50}, 0.3f, 10, Fade(BLACK, 0.75f));
+    DrawTextCentered("LIGHT CODE", 25, 32, 2, COLOR_GOLD);
+    
+    // Progress panel
+    DrawRectangleRounded({240, 70, 800, 40}, 0.3f, 10, Fade(BLACK, 0.75f));
+    if (activeMiniGame.lightCodePhase == 0) {
+        DrawTextCentered(TextFormat("Phase 1: Letters %d/15  |  Correct: %d", activeMiniGame.lightCodeRound, activeMiniGame.lightCodeCorrect), 82, 20, 2, DARKBLUE);
+    } else {
+        DrawTextCentered(TextFormat("Phase 2: Famous Signals %d/5  |  Correct: %d", activeMiniGame.lightCodeRound, activeMiniGame.lightCodeCorrect), 82, 20, 2, DARKBLUE);
+    }
+    
+    // Check if user needs to confirm they're ready
+    if (!activeMiniGame.lightCodeReady) {
+        // Ready confirmation panel
+        DrawRectangleRounded({340, 300, 600, 140}, 0.3f, 10, Fade(BLACK, 0.85f));
+        Rectangle readyRect = {340.0f, 300.0f, 600.0f, 140.0f};
+        DrawRectangleLinesEx(readyRect, 2, COLOR_GOLD);
+        
+        DrawTextCentered("ARE YOU READY?", 320, 30, 2, COLOR_GOLD);
+        if (activeMiniGame.lightCodePhase == 0) {
+            DrawTextCentered("Phase 1: Decode single letters (A-Z)", 360, 20, 2, GRAY);
+        } else {
+            DrawTextCentered("Phase 2: Decode famous morse signals", 360, 20, 2, GRAY);
+        }
+        DrawTextCentered("Press [ENTER] to watch the light pattern", 395, 22, 2, DARKBLUE);
+        return; // Don't show other UI elements
+    }
+    
+    // Instructions panel
+    DrawRectangleRounded({240, 120, 800, 80}, 0.3f, 10, Fade(BLACK, 0.75f));
+    Rectangle instructRect = {240.0f, 120.0f, 800.0f, 80.0f};
+    DrawRectangleLinesEx(instructRect, 2, Fade(COLOR_GOLD, 0.5f));
+    
+    if (activeMiniGame.lightCodePlaying) {
+        DrawTextCentered("Watch the blinking light...", 150, 26, 2, COLOR_GOLD);
+    } else {
+        // After playback - show input instructions
+        if (activeMiniGame.lightCodePhase == 0) {
+            DrawTextCentered("Type the letter and press [ENTER] to submit", 135, 24, 2, COLOR_GOLD);
+        } else {
+            DrawTextCentered("Type the signal name and press [ENTER]", 135, 24, 2, COLOR_GOLD);
+        }
+        DrawTextCentered("[SHIFT+R] Replay pattern  |  3 attempts allowed", 168, 20, 2, GRAY);
+        
+        // Show wrong attempts
+        if (activeMiniGame.lightCodeWrong > 0) {
+            DrawTextCentered(TextFormat("Wrong attempts: %d/3 (3 fails = -3 progress penalty)", activeMiniGame.lightCodeWrong), 168, 20, 2, RED);
+        }
+    }
+    
+    // Input visualization box (overlayed with better styling)
+    Rectangle inputBox = {390, 215, 500, 50};
+    DrawRectangleRounded(inputBox, 0.3f, 8, Fade(BLACK, 0.9f));
+    Rectangle inputBorder = {390.0f, 215.0f, 500.0f, 50.0f};
+    DrawRectangleLinesEx(inputBorder, 2, COLOR_GOLD);
+    
+    // Show typed input or prompt (centered in box)
+    if (activeMiniGame.lightCodeInput.empty() && !activeMiniGame.lightCodePlaying) {
+        const char* promptText = (activeMiniGame.lightCodePhase == 0) ? "Type letter..." : "Type signal...";
+        DrawTextEx(res.font, promptText, {515, 225}, 28, 2, Fade(GRAY, 0.6f));
+    } else {
+        // Center the text in the input box
+        const char* inputText = activeMiniGame.lightCodeInput.c_str();
+        Vector2 textSize = MeasureTextEx(res.font, inputText, 32, 2);
+        float textX = 640 - textSize.x / 2; // Center horizontally
+        DrawTextEx(res.font, inputText, {textX, 223}, 32, 2, COLOR_GOLD);
+    }
+    
+    // ESC hint at bottom
+    DrawText("[ESC] Exit | [SHIFT+R] Replay", 20, 690, 18, GRAY);
+}
+
+void GameEngine::DrawAboutScreenGUI() {
+    // Draw background
+    DrawTexturePro(res.bgGeneral, 
+        {0, 0, (float)res.bgGeneral.width, (float)res.bgGeneral.height},
+        {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+        {0, 0}, 0, WHITE);
+    
+    // Title with decorative line
+    DrawTextCentered("ABOUT MORSE CODE", 35, 50, 2, COLOR_GOLD);
+    DrawRectangle(340, 90, 600, 3, COLOR_GOLD);
+    
+    float yPos = 130;
+    float lineHeight = 35;
+    
+    // Introduction section
+    DrawTextCentered("Morse code is a method of encoding text characters as sequences", yPos, 24, 2, (Color){220, 220, 220, 255});
+    yPos += lineHeight;
+    DrawTextCentered("of dots and dashes. Developed in the 1830s-1840s by Samuel Morse", yPos, 24, 2, (Color){220, 220, 220, 255});
+    yPos += lineHeight;
+    DrawTextCentered("and Alfred Vail, it revolutionized long-distance communication.", yPos, 24, 2, (Color){220, 220, 220, 255});
+    yPos += lineHeight * 1.8f;
+    
+    // How it works section
+    DrawTextCentered("HOW IT WORKS:", yPos, 30, 2, COLOR_ACCENT);
+    yPos += lineHeight * 1.3f;
+    
+    DrawTextCentered("Each letter is represented by a unique combination of", yPos, 24, 2, WHITE);
+    yPos += lineHeight;
+    DrawTextCentered("DOTS (.) and DASHES (-)", yPos, 24, 2, WHITE);
+    yPos += lineHeight * 1.2f;
+    
+    DrawTextCentered("Example:  A = .-    B = -...    C = -.-.", yPos, 28, 2, (Color){100, 255, 150, 255});
+    yPos += lineHeight * 1.8f;
+    
+    // This game section
+    DrawTextCentered("THIS GAME:", yPos, 30, 2, COLOR_ACCENT);
+    yPos += lineHeight * 1.3f;
+    
+    DrawTextCentered("• Learn all 26 letters through interactive levels", yPos, 24, 2, (Color){220, 220, 220, 255});
+    yPos += lineHeight;
+    DrawTextCentered("• Master encoding (Letter→Morse) & decoding (Morse→Letter)", yPos, 24, 2, (Color){220, 220, 220, 255});
+    yPos += lineHeight;
+    DrawTextCentered("• Test your skills in challenging minigames!", yPos, 24, 2, (Color){220, 220, 220, 255});
+    yPos += lineHeight * 1.5f;
+    
+    // Bottom instruction
+    DrawTextCentered("[ENTER] or [ESC] to return", 660, 26, 2, COLOR_GOLD);
+}
+
+void GameEngine::DrawCreditsScreenGUI() {
+    // Draw background
+    DrawTexturePro(res.bgGeneral, 
+        {0, 0, (float)res.bgGeneral.width, (float)res.bgGeneral.height},
+        {0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()},
+        {0, 0}, 0, WHITE);
+    
+    // Title with decorative line
+    DrawTextCentered("CREDITS", 35, 50, 2, COLOR_GOLD);
+    DrawRectangle(490, 90, 300, 3, COLOR_GOLD);
+    
+    float yPos = 140;
+    
+    // Game title
+    DrawTextCentered("MORSE CODE LEARNER", yPos, 40, 2, COLOR_ACCENT);
+    yPos += 90;
+    
+    // Developed By section with box
+    DrawRectangle(390, yPos - 15, 500, 155, Fade(COLOR_ACCENT, 0.15f));
+    DrawRectangleLines(390, yPos - 15, 500, 155, COLOR_ACCENT);
+    
+    DrawTextCentered("Developed By", yPos, 32, 2, COLOR_GOLD);
+    yPos += 50;
+    DrawTextCentered("Abdul Rafay", yPos, 28, 2, WHITE);
+    yPos += 30;
+    DrawTextCentered("BSCS- 15A", yPos, 24, 2, (Color){200, 200, 200, 255});
+    yPos += 30;
+    DrawTextCentered("Reg no. 561139", yPos, 24, 2, (Color){200, 200, 200, 255});
+    yPos += 70;
+    
+    // Guidance By section with box
+    DrawRectangle(390, yPos - 15, 500, 110, Fade((Color){100, 200, 255, 255}, 0.15f));
+    DrawRectangleLines(390, yPos - 15, 500, 110, (Color){100, 200, 255, 255});
+    
+    DrawTextCentered("Guidance By", yPos, 32, 2, COLOR_GOLD);
+    yPos += 50;
+    DrawTextCentered("Prof. Jaudat Mamoon", yPos, 28, 2, WHITE);
+    yPos += 70;
+    
+    // Background Music credit box (bottom right)
+    float musicY = 585;
+    float musicX = 830;
+    DrawRectangle(musicX - 10, musicY - 10, 430, 90, Fade((Color){255, 200, 100, 255}, 0.15f));
+    DrawRectangleLines(musicX - 10, musicY - 10, 430, 90, (Color){255, 200, 100, 255});
+    
+    DrawTextEx(res.font, "Background Music", {musicX, musicY}, 22, 2, COLOR_ACCENT);
+    musicY += 28;
+    DrawTextEx(res.font, "Project IGI main menu Music \"I'm Going In\"", {musicX, musicY}, 16, 2, (Color){220, 220, 220, 255});
+    musicY += 22;
+    DrawTextEx(res.font, "composed by Kim M. Jensen", {musicX, musicY}, 16, 2, (Color){220, 220, 220, 255});
+    
+    // Bottom instruction
+    DrawTextCentered("[ENTER] or [ESC] to return", 680, 26, 2, COLOR_GOLD);
+}
+
+void GameEngine::Unload() {
+    res.UnloadAll();
+}

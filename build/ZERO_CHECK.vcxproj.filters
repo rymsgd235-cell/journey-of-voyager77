@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Usama Gulzar\Downloads\Rafay's Game\build\CMakeFiles\0b232e4cb19240b7469921a54edacbff\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{6FAAC3D8-D784-3EF5-876A-C4E33D76596B}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
